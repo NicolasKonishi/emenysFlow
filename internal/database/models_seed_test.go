@@ -83,6 +83,14 @@ func TestModelSeedsAreCompleteAndIdempotent(t *testing.T) {
 		t.Fatalf("seeded durations got bar=%d robot=%d", barMinutes, robotMinutes)
 	}
 	assertCount(`SELECT COUNT(*) FROM service_templates WHERE slug='pista-de-led' AND json_extract(configuration_json,'$.width_meters')=4 AND json_extract(configuration_json,'$.length_meters')=4`, 1)
+	assertCount(`SELECT COUNT(*) FROM inventory_items WHERE active=1 AND internal_code IN ('EQP-PANELA-PRESSAO','EQP-CALDEIRAO','EQP-002','EQP-PANELA-MEDIA')`, 4)
+	assertCount(`SELECT COUNT(*) FROM calculation_rules WHERE active=1 AND rule_key IN ('pressure_pans','cauldrons','large_pans','medium_pans')`, 4)
+	assertCount(`SELECT COUNT(*) FROM inventory_items WHERE active=1 AND internal_code='CUB-CAIXA-PEGADORES' AND stock_quantity=3`, 1)
+	assertCount(`SELECT COUNT(*) FROM calculation_rules WHERE active=1 AND rule_key='tongs_box' AND minimum_quantity=1`, 1)
+	assertCount(`SELECT COUNT(*) FROM service_template_components component JOIN service_components item ON item.id=component.service_component_id WHERE item.name IN ('Gelo','Canudos','Copos de acrílico') AND component.included=1`, 0)
+	assertCount(`SELECT COUNT(*) FROM calculation_rules WHERE rule_key='reusable_cups' AND active=1`, 0)
+	assertCount(`SELECT COUNT(*) FROM inventory_items WHERE internal_code='CUB-002' AND active=1`, 0)
+	assertCount(`SELECT COUNT(*) FROM events WHERE id=1 AND has_cake=1 AND TRIM(cake_notes)<>''`, 1)
 
 	if err := Migrate(ctx, db); err != nil {
 		t.Fatal(err)

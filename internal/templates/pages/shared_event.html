@@ -5,21 +5,22 @@
 </div>
 <div class="page-wrap shared-page">
   <header class="event-hero">
-    <div><span class="eyebrow">{{dateTime .Event.StartsAt}}</span><h1>BUFFET — {{.Event.ClientName}} — {{.Event.GuestCount}} pessoas</h1><p>{{.Event.Name}} · {{.Event.Venue}}</p></div>
+    <div><span class="eyebrow">{{dateTime .Event.StartsAt}}</span><h1>BUFFET — {{.Event.ClientName}} — {{.Event.GuestCount}} pessoas</h1><p>{{.Event.Name}} · {{.Event.Venue}}{{if .Event.HasCake}} · Bolo: {{if .Event.CakeNotes}}{{.Event.CakeNotes}}{{else}}sabor a definir{{end}}{{else}} · Sem bolo{{end}}</p></div>
     <button class="button secondary" type="button" data-print>Imprimir</button>
   </header>
   <section class="checklist-overview panel">
     <div class="progress-ring" style="--progress:{{.Checklist.Progress.Percentage}}"><strong>{{.Checklist.Progress.Percentage}}%</strong><small>concluído</small></div>
     <div class="overview-copy"><h2>{{.Checklist.Progress.Completed}} de {{.Checklist.Progress.Total}} itens prontos</h2><div class="progress-line large"><span style="width:{{.Checklist.Progress.Percentage}}%"></span></div></div>
   </section>
+  {{if .Event.Notes}}<aside class="panel checklist-notes"><span class="eyebrow">Observações da checklist</span><ul>{{range observationLines .Event.Notes}}<li>{{.}}</li>{{end}}</ul></aside>{{end}}
   {{range .Groups}}
   <section class="category-group panel" open>
     <summary><span>{{.Category}}</span><small>{{len .Items}} itens</small></summary>
     <div class="checklist-items">
       {{range .Items}}
       <article class="check-item public-item">
-        <span class="round-check {{if eq .Status "separated"}}checked{{end}}">{{if eq .Status "separated"}}✓{{end}}</span>
-        <div class="check-main"><strong>{{.Name}}</strong><p>{{.LocationSnapshot}}</p></div>
+        <span class="round-check {{if checklistDone .Status}}checked{{end}}">{{if checklistDone .Status}}✓{{end}}</span>
+        <div class="check-main"><strong>{{.Name}}</strong><p>{{.CategoryName}}{{if .LocationSnapshot}} · {{.LocationSnapshot}}{{end}}</p></div>
         <div class="quantity-stack"><strong>{{number .RequiredQuantity}}</strong><span>{{.Unit}}</span></div>
         <div class="availability">{{if positive .MissingQuantity}}<b>Faltam {{number .MissingQuantity}}</b>{{else}}<small class="success-text">Coberto</small>{{end}}</div>
       </article>

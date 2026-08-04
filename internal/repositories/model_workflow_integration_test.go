@@ -123,6 +123,47 @@ func TestMenuModelChoiceValidationAndSnapshotIndependence(t *testing.T) {
 	}
 }
 
+func TestCakeSectionFollowsEventCakeOption(t *testing.T) {
+	store, db, ctx := newModelWorkflowStore(t)
+	if _, err := db.ExecContext(ctx, "UPDATE events SET has_cake=0,cake_notes='' WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	var modelID int64
+	if err := db.QueryRowContext(ctx, "SELECT id FROM menu_templates WHERE slug='buffet-brunch'").Scan(&modelID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ApplyMenuModelSnapshot(ctx, 1, modelID, nil, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	selectedCakeItems := func() int {
+		t.Helper()
+		var count int
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=1 AND LOWER(section.name) LIKE '%bolo%' AND item.selected=1 AND item.was_removed=0`).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	if got := selectedCakeItems(); got != 0 {
+		t.Fatalf("cake items selected without cake = %d", got)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE events SET has_cake=1,cake_notes='Limão' WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SyncEventCakePresence(ctx, 1, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := selectedCakeItems(); got == 0 {
+		t.Fatal("cake items should be selected after enabling cake")
+	}
+	var cakeCount int
+	if err := db.QueryRowContext(ctx, "SELECT cake_count FROM event_cake_configurations WHERE event_id=1").Scan(&cakeCount); err != nil {
+		t.Fatal(err)
+	}
+	if cakeCount < 1 {
+		t.Fatalf("cake count got %d, want at least one", cakeCount)
+	}
+}
+
 func TestEventDadinhoConditionReadsSelectedMenuSnapshot(t *testing.T) {
 	store, db, ctx := newModelWorkflowStore(t)
 	var modelID int64
@@ -218,9 +259,14 @@ func TestServiceSnapshotsProduceOperationalRequirements(t *testing.T) {
 		}
 		quantities[code] = requirement.Quantity
 	}
-	for _, code := range []string{"BAR-GELO", "BAR-CANUDO", "BAR-COPO", "LED-ROBO", "LED-CANHAO", "LED-PISTA", "DEC-MESA-8"} {
+	for _, code := range []string{"LED-ROBO", "LED-CANHAO", "LED-PISTA", "DEC-MESA-8"} {
 		if quantities[code] <= 0 {
 			t.Fatalf("missing operational requirement %s: %#v", code, quantities)
+		}
+	}
+	for _, code := range []string{"BAR-GELO", "BAR-CANUDO", "BAR-COPO"} {
+		if quantities[code] > 0 {
+			t.Fatalf("rare bar material %s should remain optional: %#v", code, quantities)
 		}
 	}
 	if quantities["DEC-MESA-8"] != 3 {

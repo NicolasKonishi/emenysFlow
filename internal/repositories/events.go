@@ -10,7 +10,7 @@ import (
 )
 
 const eventColumns = `e.id, e.template_id, e.client_name, e.name, e.venue, e.starts_at, e.ends_at,
-	e.guest_count, e.has_decoration, e.has_welcome_drinks, e.has_coffee_table,
+	e.guest_count, e.has_decoration, e.has_welcome_drinks, e.has_coffee_table, e.has_cake,
 	e.starters_notes, e.main_courses_notes, e.sides_notes, e.beverages_notes,
 	e.coffee_table_notes, e.cake_notes, e.sweets_notes, e.desserts_notes, e.notes,
 	e.safety_margin_percent, e.waiter_override, e.kitchen_cook_id,
@@ -21,10 +21,10 @@ const eventColumns = `e.id, e.template_id, e.client_name, e.name, e.venue, e.sta
 func scanEvent(scanner interface{ Scan(...any) error }) (models.Event, error) {
 	var event models.Event
 	var starts, ends, created, updated string
-	var decoration, welcome, coffee, glassware, active int
+	var decoration, welcome, coffee, cake, glassware, active int
 	err := scanner.Scan(
 		&event.ID, &event.TemplateID, &event.ClientName, &event.Name, &event.Venue, &starts, &ends,
-		&event.GuestCount, &decoration, &welcome, &coffee,
+		&event.GuestCount, &decoration, &welcome, &coffee, &cake,
 		&event.StartersNotes, &event.MainCoursesNotes, &event.SidesNotes, &event.BeveragesNotes,
 		&event.CoffeeTableNotes, &event.CakeNotes, &event.SweetsNotes, &event.DessertsNotes, &event.Notes,
 		&event.SafetyMarginPercent, &event.WaiterOverride, &event.KitchenCookID, &event.KitchenCookName,
@@ -38,6 +38,7 @@ func scanEvent(scanner interface{ Scan(...any) error }) (models.Event, error) {
 	event.HasDecoration = decoration == 1
 	event.HasWelcomeDrinks = welcome == 1
 	event.HasCoffeeTable = coffee == 1
+	event.HasCake = cake == 1
 	event.UsesGlassware = glassware == 1
 	event.Active = active == 1
 	return event, err
@@ -52,7 +53,7 @@ func (s *Store) ListEvents(ctx context.Context, query string) ([]models.Event, e
 		COALESCE((SELECT COUNT(*) FROM checklist_shortages shortage WHERE shortage.event_id=e.id AND shortage.status NOT IN ('resolved','cancelled')),0),
 		COALESCE((SELECT COUNT(*) FROM checklist_shortages shortage WHERE shortage.event_id=e.id AND shortage.resolution_type='purchase' AND shortage.status NOT IN ('resolved','cancelled')),0),
 		COALESCE((SELECT COUNT(*) FROM checklist_shortages shortage WHERE shortage.event_id=e.id AND shortage.resolution_type='rental' AND shortage.status NOT IN ('resolved','cancelled')),0)
-		FROM events e WHERE e.active = 1 AND (? = '%%' OR e.name LIKE ? COLLATE NOCASE OR e.client_name LIKE ? COLLATE NOCASE OR e.venue LIKE ? COLLATE NOCASE)
+		FROM events e WHERE e.active = 1 AND e.status<>'cancelled' AND (? = '%%' OR e.name LIKE ? COLLATE NOCASE OR e.client_name LIKE ? COLLATE NOCASE OR e.venue LIKE ? COLLATE NOCASE)
 		ORDER BY e.starts_at`, pattern, pattern, pattern, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
@@ -62,10 +63,10 @@ func (s *Store) ListEvents(ctx context.Context, query string) ([]models.Event, e
 	for rows.Next() {
 		var event models.Event
 		var starts, ends, created, updated string
-		var decoration, welcome, coffee, glassware, active int
+		var decoration, welcome, coffee, cake, glassware, active int
 		err := rows.Scan(
 			&event.ID, &event.TemplateID, &event.ClientName, &event.Name, &event.Venue, &starts, &ends,
-			&event.GuestCount, &decoration, &welcome, &coffee,
+			&event.GuestCount, &decoration, &welcome, &coffee, &cake,
 			&event.StartersNotes, &event.MainCoursesNotes, &event.SidesNotes, &event.BeveragesNotes,
 			&event.CoffeeTableNotes, &event.CakeNotes, &event.SweetsNotes, &event.DessertsNotes, &event.Notes,
 			&event.SafetyMarginPercent, &event.WaiterOverride, &event.KitchenCookID, &event.KitchenCookName,
@@ -79,6 +80,7 @@ func (s *Store) ListEvents(ctx context.Context, query string) ([]models.Event, e
 		event.StartsAt, event.EndsAt = parseTime(starts), parseTime(ends)
 		event.CreatedAt, event.UpdatedAt = parseTime(created), parseTime(updated)
 		event.HasDecoration, event.HasWelcomeDrinks, event.HasCoffeeTable = decoration == 1, welcome == 1, coffee == 1
+		event.HasCake = cake == 1
 		event.UsesGlassware = glassware == 1
 		event.Active = active == 1
 		events = append(events, event)
@@ -112,12 +114,12 @@ func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64
 	if event.ID == 0 {
 		result, err := s.db.ExecContext(ctx, `INSERT INTO events(
 			template_id, client_name, name, venue, starts_at, ends_at, guest_count, has_decoration, has_welcome_drinks,
-			has_coffee_table, starters_notes, main_courses_notes, sides_notes, beverages_notes,
+			has_coffee_table, has_cake, starters_notes, main_courses_notes, sides_notes, beverages_notes,
 			coffee_table_notes, cake_notes, sweets_notes, desserts_notes, notes, safety_margin_percent,
 			waiter_override, kitchen_cook_id, coordinator_override,leader_override,co_leader_override,additional_guest_margin_override,uses_glassware,status, active, created_by,updated_by, created_at, updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'planning',1,?,?,?,?)`,
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'planning',1,?,?,?,?)`,
 			nullInt64(event.TemplateID), event.ClientName, event.Name, event.Venue, starts, ends, event.GuestCount,
-			event.HasDecoration, event.HasWelcomeDrinks, event.HasCoffeeTable,
+			event.HasDecoration, event.HasWelcomeDrinks, event.HasCoffeeTable, event.HasCake,
 			event.StartersNotes, event.MainCoursesNotes, event.SidesNotes, event.BeveragesNotes,
 			event.CoffeeTableNotes, event.CakeNotes, event.SweetsNotes, event.DessertsNotes, event.Notes,
 			event.SafetyMarginPercent, waiterOverride, kitchenCookID, coordinatorOverride, leaderOverride, coLeaderOverride, additionalMarginOverride, event.UsesGlassware, nullableUserID(userID), nullableUserID(userID), now, now)
@@ -132,11 +134,11 @@ func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64
 		var before string
 		_ = tx.QueryRowContext(ctx, `SELECT json_object('guest_count', guest_count, 'welcome_drinks', has_welcome_drinks, 'decoration', has_decoration, 'kitchen_cook_id', kitchen_cook_id, 'updated_at', updated_at) FROM events WHERE id = ?`, event.ID).Scan(&before)
 		result, err := tx.ExecContext(ctx, `UPDATE events SET template_id=?,client_name=?, name=?, venue=?, starts_at=?, ends_at=?, guest_count=?,
-			has_decoration=?, has_welcome_drinks=?, has_coffee_table=?, starters_notes=?, main_courses_notes=?,
+			has_decoration=?, has_welcome_drinks=?, has_coffee_table=?, has_cake=?, starters_notes=?, main_courses_notes=?,
 			sides_notes=?, beverages_notes=?, coffee_table_notes=?, cake_notes=?, sweets_notes=?, desserts_notes=?,
 			notes=?, safety_margin_percent=?, waiter_override=?, kitchen_cook_id=?,coordinator_override=?,leader_override=?,co_leader_override=?,additional_guest_margin_override=?,uses_glassware=?,updated_by=?,row_version=row_version+1, updated_at=? WHERE id=? AND active=1`,
 			nullInt64(event.TemplateID), event.ClientName, event.Name, event.Venue, starts, ends, event.GuestCount,
-			event.HasDecoration, event.HasWelcomeDrinks, event.HasCoffeeTable,
+			event.HasDecoration, event.HasWelcomeDrinks, event.HasCoffeeTable, event.HasCake,
 			event.StartersNotes, event.MainCoursesNotes, event.SidesNotes, event.BeveragesNotes,
 			event.CoffeeTableNotes, event.CakeNotes, event.SweetsNotes, event.DessertsNotes, event.Notes,
 			event.SafetyMarginPercent, waiterOverride, kitchenCookID, coordinatorOverride, leaderOverride, coLeaderOverride, additionalMarginOverride, event.UsesGlassware, nullableUserID(userID), now, event.ID)

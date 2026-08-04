@@ -1,9 +1,32 @@
 document.addEventListener("submit", (event) => {
   const form = event.target.closest("form[data-confirm]");
   if (form && !window.confirm(form.dataset.confirm)) event.preventDefault();
+
+  const preservedForm = event.target.closest("form[data-preserve-scroll]");
+  if (preservedForm && !event.defaultPrevented) {
+    sessionStorage.setItem("buffetflow-preserved-scroll", JSON.stringify({ path: window.location.pathname, top: window.scrollY }));
+    window.setTimeout(() => sessionStorage.removeItem("buffetflow-preserved-scroll"), 2000);
+  }
 });
 
-document.addEventListener("click",(event)=>{if(event.target.closest("[data-print]"))window.print();});
+document.addEventListener("click",(event)=>{
+  if(event.target.closest("[data-print]"))window.print();
+  if(event.target.closest("[data-group-check]"))event.stopPropagation();
+});
+
+function restorePreservedScroll() {
+  const raw = sessionStorage.getItem("buffetflow-preserved-scroll");
+  if (!raw) return;
+  sessionStorage.removeItem("buffetflow-preserved-scroll");
+  try {
+    const saved = JSON.parse(raw);
+    if (saved.path === window.location.pathname && Number.isFinite(saved.top)) {
+      window.requestAnimationFrame(() => window.scrollTo({ top: saved.top, behavior: "instant" }));
+    }
+  } catch (_error) {
+    // Ignore an invalid value left by an older browser session.
+  }
+}
 
 function navKeyForPath(pathname) {
   if (pathname === "/") return "dashboard";
@@ -101,6 +124,7 @@ function initializeMenuModelFallback(root = document) {
         const response = await fetch(url, { headers: { "HX-Request": "true" }, credentials: "same-origin" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         target.innerHTML = await response.text();
+        initializeEventCakeToggle(document);
       } catch (_error) {
         target.innerHTML = '<div class="alert danger">Não foi possível carregar este modelo. Tente novamente.</div>';
       } finally {
@@ -303,6 +327,31 @@ function initializeEventDecorationToggle(root = document) {
   });
 }
 
+function refreshEventCakeOption(toggle) {
+  const form = toggle.closest("form");
+  if (!form) return;
+  const flavorField = form.querySelector("[data-cake-flavor-field]");
+  if (flavorField) {
+    flavorField.hidden = !toggle.checked;
+    flavorField.querySelectorAll("input").forEach((input) => { input.disabled = !toggle.checked; });
+  }
+  form.querySelectorAll("[data-cake-model-section]").forEach((section) => {
+    section.hidden = !toggle.checked;
+    section.querySelectorAll("input,select,textarea").forEach((control) => { control.disabled = !toggle.checked; });
+    if (toggle.checked) section.querySelectorAll('input[name="model_item_ids"][data-model-included]').forEach((input) => { input.checked = true; });
+  });
+}
+
+function initializeEventCakeToggle(root = document) {
+  root.querySelectorAll("#event-has-cake").forEach((toggle) => {
+    if (toggle.dataset.cakeInitialized !== "true") {
+      toggle.dataset.cakeInitialized = "true";
+      toggle.addEventListener("change", () => refreshEventCakeOption(toggle));
+    }
+    refreshEventCakeOption(toggle);
+  });
+}
+
 function initializeRentedDecorations(root = document) {
   root.querySelectorAll("[data-rented-decoration-editor]").forEach((editor) => {
     if (editor.dataset.rentedDecorationInitialized === "true") return;
@@ -334,7 +383,62 @@ function initializeRentedDecorations(root = document) {
   });
 }
 
+function initializeChecklistObservations(root = document) {
+  root.querySelectorAll("[data-checklist-observations-editor]").forEach((editor) => {
+    if (editor.dataset.checklistObservationsInitialized === "true") return;
+    editor.dataset.checklistObservationsInitialized = "true";
+    const list = editor.querySelector("[data-checklist-observations-list]");
+    const template = editor.querySelector("[data-checklist-observation-template]");
+    const addButton = editor.querySelector("[data-add-checklist-observation]");
+    if (!list || !template || !addButton) return;
+
+    addButton.addEventListener("click", () => {
+      const row = template.content.firstElementChild?.cloneNode(true);
+      if (!row) return;
+      list.appendChild(row);
+      row.querySelector('input[name="checklist_observations"]')?.focus();
+    });
+
+    editor.addEventListener("click", (event) => {
+      const removeButton = event.target.closest("[data-remove-checklist-observation]");
+      if (!removeButton) return;
+      removeButton.closest(".checklist-observation-row")?.remove();
+    });
+  });
+}
+
+function normalizeInventoryCodePart(value) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function initializeInventoryInternalCode(root = document) {
+  root.querySelectorAll('[data-inventory-item-form][data-inventory-code-mode="create"]').forEach((form) => {
+    if (form.dataset.inventoryCodeInitialized === "true") return;
+    form.dataset.inventoryCodeInitialized = "true";
+    const name = form.querySelector("[data-inventory-item-name]");
+    const category = form.querySelector("[data-inventory-category]");
+    const internalCode = form.querySelector("[data-inventory-internal-code]");
+    if (!name || !category || !internalCode) return;
+
+    const refresh = () => {
+      const prefix = normalizeInventoryCodePart(category.selectedOptions[0]?.dataset.codePrefix || "").toUpperCase();
+      const itemName = normalizeInventoryCodePart(name.value);
+      internalCode.value = [prefix, itemName].filter(Boolean).join("-");
+    };
+
+    name.addEventListener("input", refresh);
+    category.addEventListener("change", refresh);
+    refresh();
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+	restorePreservedScroll();
   updatePrimaryNavigation();
   initializeMenuTemplateSelectors();
   initializeMenuModelFallback();
@@ -342,7 +446,10 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMobileLoading();
 	initializeMenuCategoryRules();
 	initializeEventDecorationToggle();
+	initializeEventCakeToggle();
 	initializeRentedDecorations();
+	initializeChecklistObservations();
+	initializeInventoryInternalCode();
 });
 
 document.addEventListener("htmx:beforeRequest", (event) => {
@@ -355,7 +462,6 @@ document.addEventListener("htmx:pushedIntoHistory", () => {
 });
 
 document.addEventListener("htmx:afterSwap", (event) => {
-  window.scrollTo({ top: 0, behavior: "instant" });
   updatePrimaryNavigation();
   initializeMenuTemplateSelectors(event.target);
   initializeMenuModelFallback(event.target);
@@ -363,5 +469,8 @@ document.addEventListener("htmx:afterSwap", (event) => {
   initializeMobileLoading(event.target);
 	initializeMenuCategoryRules(event.target);
 	initializeEventDecorationToggle(event.target);
+	initializeEventCakeToggle(document);
 	initializeRentedDecorations(event.target);
+	initializeChecklistObservations(event.target);
+	initializeInventoryInternalCode(event.target);
 });

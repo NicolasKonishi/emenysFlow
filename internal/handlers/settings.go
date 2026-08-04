@@ -142,11 +142,12 @@ func (a *App) categorySave(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = r.ParseForm()
 	name := strings.TrimSpace(r.FormValue("name"))
+	codePrefix := normalizeInventoryCodePrefix(r.FormValue("internal_code_prefix"))
 	var err error
-	if name == "" {
-		err = fmt.Errorf("empty name")
+	if name == "" || codePrefix == "" {
+		err = fmt.Errorf("empty name or internal code prefix")
 	} else {
-		err = a.store.SaveCategory(r.Context(), name)
+		err = a.store.SaveCategory(r.Context(), name, codePrefix)
 	}
 	target := "/settings?message=" + url.QueryEscape("Categoria criada.")
 	if err != nil {

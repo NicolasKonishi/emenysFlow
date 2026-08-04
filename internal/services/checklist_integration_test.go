@@ -174,8 +174,8 @@ func TestSelectedCookAddsBoxesAndHidesTheirStoredItems(t *testing.T) {
 	for _, item := range before.Items {
 		looseBefore[item.Name] = true
 	}
-	if !looseBefore["Colher de serviço"] || !looseBefore["Concha"] {
-		t.Fatal("demo event should initially require the loose service spoon and ladle")
+	if looseBefore["Colher de serviço"] || !looseBefore["Concha"] || !looseBefore["Caixa de pegadores"] {
+		t.Fatal("demo event should use the tongs box instead of a loose service spoon, while retaining the ladle")
 	}
 
 	var crisID int64
@@ -375,7 +375,7 @@ func TestDisposableRulesMatchEventBriefing(t *testing.T) {
 	}
 }
 
-func TestChecklistIncludesSelectedServiceMaterials(t *testing.T) {
+func TestChecklistKeepsRareBarMaterialsManual(t *testing.T) {
 	store, closeStore := testStore(t)
 	defer closeStore()
 	ctx := context.Background()
@@ -400,9 +400,14 @@ func TestChecklistIncludesSelectedServiceMaterials(t *testing.T) {
 	for _, item := range checklist.Items {
 		items[item.Name] = item.RequiredQuantity
 	}
-	for _, name := range []string{"Gelo", "Canudo", "Copo de acrílico", "Robô de LED", "Canhão de CO2"} {
+	for _, name := range []string{"Robô de LED", "Canhão de CO2"} {
 		if items[name] <= 0 {
 			t.Fatalf("service material %q missing from checklist: %#v", name, items)
+		}
+	}
+	for _, name := range []string{"Gelo", "Canudo", "Copo de acrílico", "Copo reutilizável"} {
+		if items[name] > 0 {
+			t.Fatalf("rare material %q should only be added manually: %#v", name, items)
 		}
 	}
 }
@@ -556,7 +561,7 @@ func TestMobileVanChecklistSavesCompleteAndMissingDecisions(t *testing.T) {
 	}
 }
 
-func TestMainCoursesAndSidesGenerateOneCubaEachWithoutDuplicates(t *testing.T) {
+func TestMainCoursesAndSidesDuplicateCubasOnlyAboveOneHundredGuests(t *testing.T) {
 	store, closeStore := testStore(t)
 	defer closeStore()
 	ctx := context.Background()
@@ -564,18 +569,69 @@ func TestMainCoursesAndSidesGenerateOneCubaEachWithoutDuplicates(t *testing.T) {
 	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM event_menu_items selected JOIN menu_items item ON item.id=selected.menu_item_id JOIN menu_categories category ON category.id=item.category_id WHERE selected.event_id=1 AND category.slug IN ('main_courses','sides')`).Scan(&selectedDishes); err != nil {
 		t.Fatal(err)
 	}
-	checklist, err := NewChecklistService(store).Generate(ctx, 1)
+	cubaQuantity := func(guests int) (int, float64) {
+		t.Helper()
+		if _, err := store.DB().ExecContext(ctx, "UPDATE events SET guest_count=? WHERE id=1", guests); err != nil {
+			t.Fatal(err)
+		}
+		checklist, err := NewChecklistService(store).Generate(ctx, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found, quantity := 0, 0.0
+		for _, item := range checklist.Items {
+			if item.Name == "Cuba GN 1/1" {
+				found++
+				quantity += item.RequiredQuantity
+			}
+		}
+		return found, quantity
+	}
+
+	found, quantity := cubaQuantity(100)
+	if found != 1 || int(quantity) != selectedDishes {
+		t.Fatalf("100 convidados: cubas got entries=%d quantity=%.0f, want one entry with %d", found, quantity, selectedDishes)
+	}
+	found, quantity = cubaQuantity(101)
+	if found != 1 || int(quantity) != selectedDishes*2 {
+		t.Fatalf("101 convidados: cubas got entries=%d quantity=%.0f, want one entry with %d", found, quantity, selectedDishes*2)
+	}
+}
+
+func TestChecklistIncludesMinimumPanKitAndTongsBox(t *testing.T) {
+	store, closeStore := testStore(t)
+	defer closeStore()
+	checklist, err := NewChecklistService(store).Generate(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found, quantity := 0, 0.0
+
+	quantities := map[string]float64{}
 	for _, item := range checklist.Items {
-		if item.Name == "Cuba GN 1/1" {
-			found++
-			quantity += item.RequiredQuantity
-		}
+		quantities[item.Name] += item.RequiredQuantity
 	}
-	if found != 1 || int(quantity) != selectedDishes {
-		t.Fatalf("cubas got entries=%d quantity=%.0f, want one entry with %d", found, quantity, selectedDishes)
+	wantPans := map[string]float64{
+		"Panela de pressão": 3,
+		"Caldeirão":         3,
+		"Panela grande":     5,
+		"Panela média":      4,
+	}
+	totalPans := 0.0
+	for name, want := range wantPans {
+		if got := quantities[name]; got != want {
+			t.Errorf("%s quantity got %.0f, want %.0f", name, got, want)
+		}
+		totalPans += quantities[name]
+	}
+	if totalPans != 15 {
+		t.Errorf("total pan kit got %.0f, want 15", totalPans)
+	}
+	if got := quantities["Caixa de pegadores"]; got != 1 {
+		t.Errorf("Caixa de pegadores quantity got %.0f, want 1", got)
+	}
+	for _, unwanted := range []string{"Rechaud", "Colher de serviço", "Copo reutilizável"} {
+		if got := quantities[unwanted]; got != 0 {
+			t.Errorf("%s should not be generated automatically; got %.0f", unwanted, got)
+		}
 	}
 }

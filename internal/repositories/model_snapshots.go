@@ -16,6 +16,10 @@ func isCoffeeTableSection(name string) bool {
 	return normalized == "mesa de café" || normalized == "mesa do café"
 }
 
+func isCakeSection(name string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(name)), "bolo")
+}
+
 func (s *Store) ValidateMenuModelSelections(ctx context.Context, modelID int64, selectedIDs []int64) error {
 	selected := make(map[int64]bool, len(selectedIDs))
 	for _, id := range selectedIDs {
@@ -113,6 +117,10 @@ func (s *Store) ApplyMenuModelSnapshotWithCustomizations(ctx context.Context, ev
 	}
 	return withTx(ctx, s.db, func(tx *sql.Tx) error {
 		now := nowString()
+		var hasCake int
+		if err := tx.QueryRowContext(ctx, "SELECT has_cake FROM events WHERE id=?", eventID).Scan(&hasCake); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM event_menu_templates WHERE event_id=?", eventID); err != nil {
 			return err
 		}
@@ -175,6 +183,9 @@ func (s *Store) ApplyMenuModelSnapshotWithCustomizations(ctx context.Context, ev
 					return err
 				}
 				isSelected := selected[itemID] || (!explicitSelection && included == 1)
+				if isCakeSection(sectionName) && hasCake == 0 {
+					isSelected = false
+				}
 				displayName := label
 				if override := strings.TrimSpace(itemNames[itemID]); override != "" {
 					displayName = override

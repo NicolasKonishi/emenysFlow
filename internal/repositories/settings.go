@@ -68,9 +68,9 @@ func (s *Store) ToggleUser(ctx context.Context, id, currentUserID int64) error {
 	_, err := s.db.ExecContext(ctx, "UPDATE users SET active=CASE active WHEN 1 THEN 0 ELSE 1 END,updated_at=? WHERE id=?", nowString(), id)
 	return err
 }
-func (s *Store) SaveCategory(ctx context.Context, name string) error {
+func (s *Store) SaveCategory(ctx context.Context, name, codePrefix string) error {
 	now := nowString()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO inventory_categories(name,sort_order,active,created_at,updated_at) VALUES(?,(SELECT COALESCE(MAX(sort_order),0)+10 FROM inventory_categories),1,?,?)`, name, now, now)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO inventory_categories(name,internal_code_prefix,sort_order,active,created_at,updated_at) VALUES(?,?,(SELECT COALESCE(MAX(sort_order),0)+10 FROM inventory_categories),1,?,?)`, name, codePrefix, now, now)
 	return err
 }
 func (s *Store) SaveLocation(ctx context.Context, name string) error {

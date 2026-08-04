@@ -15,7 +15,7 @@
         <td data-label="Convidados"><strong>{{.GuestCount}}</strong><small>pessoas</small></td>
         <td data-label="Checklist"><div class="progress-cell"><div class="progress-line"><span style="width:{{percent .ChecklistProgress}}%"></span></div><small>{{percent .ChecklistProgress}}% {{if gt .MissingItems 0}}· <b class="danger-text">{{.MissingItems}} faltas</b>{{end}}</small></div></td>
         <td data-label="Status"><span class="badge {{statusClass .Status}}">{{statusLabel .Status}}</span></td>
-        <td class="row-action"><a class="button ghost small" href="/events/{{.ID}}">Abrir →</a></td>
+        <td class="row-action"><a class="button ghost small" href="/events/{{.ID}}">Abrir →</a><form action="/events/{{.ID}}/cancel" method="post" data-confirm="Cancelar este evento e removê-lo da lista? As reservas serão liberadas."><button class="button danger small" type="submit">Cancelar</button></form></td>
       </tr>{{end}}
     </tbody></table></div>
     {{else}}<div class="empty-state"><span>◫</span><strong>Nenhum evento encontrado</strong><p>Altere a busca ou cadastre um novo evento.</p></div>{{end}}

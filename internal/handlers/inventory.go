@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"buffetflow/internal/models"
 )
@@ -67,6 +68,13 @@ func (a *App) parseInventoryForm(request *http.Request, id int64) (models.Invent
 		InternalCode: strings.TrimSpace(request.FormValue("internal_code")), Barcode: strings.TrimSpace(request.FormValue("barcode")), PhotoURL: strings.TrimSpace(request.FormValue("photo_url")),
 		ItemKind: request.FormValue("item_kind"), Ownership: request.FormValue("ownership"), RequiresReturn: boolForm(request.FormValue("requires_return")),
 		ReplacementValueCents: int64(parseFloat(request.FormValue("replacement_value")) * 100), Notes: strings.TrimSpace(request.FormValue("notes")), Active: true}
+	if id == 0 {
+		prefix, err := a.store.InventoryCategoryCodePrefix(request.Context(), category.Int64)
+		if err != nil {
+			return item, fmt.Errorf("Selecione uma categoria válida.")
+		}
+		item.InternalCode = buildInventoryInternalCode(prefix, item.Name)
+	}
 	if item.Name == "" || item.InternalCode == "" || item.Unit == "" {
 		return item, fmt.Errorf("Nome, código interno e unidade são obrigatórios.")
 	}
@@ -74,6 +82,48 @@ func (a *App) parseInventoryForm(request *http.Request, id int64) (models.Invent
 		return item, fmt.Errorf("Revise as quantidades de estoque e itens danificados.")
 	}
 	return item, nil
+}
+
+var inventoryCodeAccents = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+	"é", "e", "è", "e", "ê", "e", "ë", "e",
+	"í", "i", "ì", "i", "î", "i", "ï", "i",
+	"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+	"ú", "u", "ù", "u", "û", "u", "ü", "u", "ç", "c",
+)
+
+func normalizeInventoryCodePart(value string) string {
+	value = inventoryCodeAccents.Replace(strings.ToLower(strings.TrimSpace(value)))
+	var result strings.Builder
+	separator := false
+	for _, character := range value {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			if separator && result.Len() > 0 {
+				result.WriteByte('-')
+			}
+			result.WriteRune(character)
+			separator = false
+			continue
+		}
+		separator = result.Len() > 0
+	}
+	return result.String()
+}
+
+func normalizeInventoryCodePrefix(value string) string {
+	return strings.ToUpper(normalizeInventoryCodePart(value))
+}
+
+func buildInventoryInternalCode(prefix, name string) string {
+	cleanPrefix := normalizeInventoryCodePrefix(prefix)
+	cleanName := normalizeInventoryCodePart(name)
+	if cleanPrefix == "" {
+		return cleanName
+	}
+	if cleanName == "" {
+		return cleanPrefix
+	}
+	return cleanPrefix + "-" + cleanName
 }
 
 func (a *App) inventoryCreate(writer http.ResponseWriter, request *http.Request) {

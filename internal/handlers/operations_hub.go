@@ -62,6 +62,7 @@ func (a *App) operationHub(w http.ResponseWriter, r *http.Request) {
 	data := a.baseData(r, "Operação do evento", "events")
 	data.Event = event
 	data.Checklist = checklist
+	data.Groups = groupChecklist(checklist.Items)
 	data.Shortages = shortages
 	data.ActiveTab = tab
 	data.Categories, _ = a.store.ListCategories(r.Context())

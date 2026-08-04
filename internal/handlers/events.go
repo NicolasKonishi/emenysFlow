@@ -85,15 +85,20 @@ func (a *App) parseEventForm(request *http.Request, id int64) (models.Event, err
 	if err != nil || !ends.After(starts) {
 		return models.Event{}, fmt.Errorf("O término precisa ser posterior ao início.")
 	}
+	hasCake := boolForm(request.FormValue("has_cake"))
+	cakeNotes := ""
+	if hasCake {
+		cakeNotes = strings.TrimSpace(request.FormValue("cake_notes"))
+	}
 	event := models.Event{
 		ID: id, TemplateID: parseOptionalInt(request.FormValue("template_id")), ClientName: strings.TrimSpace(request.FormValue("client_name")), Name: strings.TrimSpace(request.FormValue("name")),
 		Venue: strings.TrimSpace(request.FormValue("venue")), StartsAt: starts, EndsAt: ends, GuestCount: guestCount,
-		HasDecoration: boolForm(request.FormValue("has_decoration")), HasWelcomeDrinks: boolForm(request.FormValue("has_welcome_drinks")), HasCoffeeTable: boolForm(request.FormValue("has_coffee_table")),
+		HasDecoration: boolForm(request.FormValue("has_decoration")), HasWelcomeDrinks: boolForm(request.FormValue("has_welcome_drinks")), HasCoffeeTable: boolForm(request.FormValue("has_coffee_table")), HasCake: hasCake,
 		StartersNotes: strings.TrimSpace(request.FormValue("starters_notes")), MainCoursesNotes: strings.TrimSpace(request.FormValue("main_courses_notes")),
 		SidesNotes: strings.TrimSpace(request.FormValue("sides_notes")), BeveragesNotes: strings.TrimSpace(request.FormValue("beverages_notes")),
-		CoffeeTableNotes: strings.TrimSpace(request.FormValue("coffee_table_notes")), CakeNotes: strings.TrimSpace(request.FormValue("cake_notes")),
+		CoffeeTableNotes: strings.TrimSpace(request.FormValue("coffee_table_notes")), CakeNotes: cakeNotes,
 		SweetsNotes: strings.TrimSpace(request.FormValue("sweets_notes")), DessertsNotes: strings.TrimSpace(request.FormValue("desserts_notes")),
-		Notes: strings.TrimSpace(request.FormValue("notes")), SafetyMarginPercent: parseFloat(request.FormValue("safety_margin_percent")),
+		Notes: checklistObservations(request.Form), SafetyMarginPercent: parseFloat(request.FormValue("safety_margin_percent")),
 		WaiterOverride: parseOptionalInt(request.FormValue("waiter_override")), CoordinatorOverride: parseOptionalInt(request.FormValue("coordinator_override")),
 		LeaderOverride: parseOptionalInt(request.FormValue("leader_override")), CoLeaderOverride: parseOptionalInt(request.FormValue("co_leader_override")),
 		AdditionalGuestMarginOverride: parseOptionalFloat(request.FormValue("additional_guest_margin_override")), UsesGlassware: boolForm(request.FormValue("uses_glassware")),
@@ -106,6 +111,20 @@ func (a *App) parseEventForm(request *http.Request, id int64) (models.Event, err
 		return event, fmt.Errorf("A margem deve estar entre 0%% e 100%%.")
 	}
 	return event, nil
+}
+
+func checklistObservations(form url.Values) string {
+	values, exists := form["checklist_observations"]
+	if !exists {
+		return strings.TrimSpace(form.Get("notes"))
+	}
+	observations := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			observations = append(observations, value)
+		}
+	}
+	return strings.Join(observations, "\n")
 }
 
 func parsePositiveInt(value string) (int, error) {
@@ -141,7 +160,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 	}
 	modelItemIDs := formInt64Values(request, "model_item_ids")
 	serviceModelIDs := formInt64Values(request, "service_model_ids")
-	customItems := formLines(request.FormValue("model_custom_items"))
+	customItems := []string{}
 	itemNames := parseMenuModelItemNames(request)
 	sectionCustomItems := parseMenuModelSectionCustomItems(request)
 	itemConfigurations := parseMenuModelConfigurations(request)
@@ -282,6 +301,10 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 			return
 		}
 	} else if err := a.store.ClearMenuModelSnapshot(request.Context(), event.ID); err != nil {
+		a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(err))), http.StatusSeeOther)
+		return
+	}
+	if err := a.store.SyncEventCakePresence(request.Context(), event.ID, user.ID); err != nil {
 		a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(err))), http.StatusSeeOther)
 		return
 	}
@@ -615,14 +638,58 @@ func (a *App) eventShow(writer http.ResponseWriter, request *http.Request) {
 }
 
 func groupChecklist(items []models.ChecklistItem) []models.ChecklistGroup {
-	var groups []models.ChecklistGroup
+	definitions := []models.ChecklistGroup{
+		{Key: "material", Category: "Material", Completed: true},
+		{Key: "decoration", Category: "Decoração", Completed: true},
+		{Key: "team", Category: "Equipe", Completed: true},
+	}
+	groupIndexes := map[string]int{"material": 0, "decoration": 1, "team": 2}
 	for _, item := range items {
-		if len(groups) == 0 || groups[len(groups)-1].Category != item.CategoryName {
-			groups = append(groups, models.ChecklistGroup{Category: item.CategoryName})
+		key := checklistOperationalGroup(item)
+		index := groupIndexes[key]
+		definitions[index].Items = append(definitions[index].Items, item)
+		if !checklistStatusCompleted(item.Status) {
+			definitions[index].Completed = false
 		}
-		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
+	}
+	groups := make([]models.ChecklistGroup, 0, len(definitions))
+	for _, group := range definitions {
+		if len(group.Items) > 0 {
+			groups = append(groups, group)
+		}
 	}
 	return groups
+}
+
+func checklistOperationalGroup(item models.ChecklistItem) string {
+	origin := strings.ToLower(item.CalculationOrigin)
+	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	if category == "decoração" || strings.HasPrefix(item.SourceKey, "decoration:") || strings.HasPrefix(item.SourceKey, "decoration-rental:") || strings.Contains(origin, "decoração") {
+		return "decoration"
+	}
+	if category == "equipe" || category == "itens dos garçons" {
+		return "team"
+	}
+	staffNames := map[string]bool{
+		"garçom": true, "garçons": true, "coordenador": true, "coordenadores": true,
+		"líder": true, "líderes": true, "colíder": true, "colíderes": true,
+		"barman": true, "barmen": true, "cozinheira": true, "cozinheiras": true,
+		"copeira": true, "copeiras": true, "metriê": true, "maître": true,
+		"assessora": true, "assistente": true,
+	}
+	if staffNames[strings.ToLower(strings.TrimSpace(item.Name))] {
+		return "team"
+	}
+	return "material"
+}
+
+func checklistStatusCompleted(status string) bool {
+	switch status {
+	case "separated", "checked", "loaded", "at_event", "returned", "not_applicable":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *App) eventGenerate(writer http.ResponseWriter, request *http.Request) {
@@ -771,6 +838,46 @@ func (a *App) checklistStatus(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 	a.redirect(writer, request, "/events/"+eventID+"?message="+url.QueryEscape("Status atualizado."), http.StatusSeeOther)
+}
+
+func (a *App) checklistGroupStatus(writer http.ResponseWriter, request *http.Request) {
+	eventID, err := pathID(request)
+	if err != nil {
+		http.NotFound(writer, request)
+		return
+	}
+	if err = request.ParseForm(); err != nil {
+		http.Error(writer, "Dados inválidos.", http.StatusBadRequest)
+		return
+	}
+	checklist, err := a.store.GetChecklistByEvent(request.Context(), eventID)
+	if err != nil {
+		a.redirect(writer, request, fmt.Sprintf("/events/%d?type=danger&message=%s#checklist", eventID, url.QueryEscape(databaseErrorMessage(err))), http.StatusSeeOther)
+		return
+	}
+	groupKey := request.PathValue("group")
+	var itemIDs []int64
+	for _, group := range groupChecklist(checklist.Items) {
+		if group.Key != groupKey {
+			continue
+		}
+		for _, item := range group.Items {
+			itemIDs = append(itemIDs, item.ID)
+		}
+		break
+	}
+	if len(itemIDs) == 0 {
+		http.NotFound(writer, request)
+		return
+	}
+	err = a.store.UpdateChecklistItemsStatus(request.Context(), eventID, itemIDs, request.FormValue("status"), currentUser(request).ID)
+	message := "Grupo atualizado."
+	messageType := ""
+	if err != nil {
+		message = databaseErrorMessage(err)
+		messageType = "type=danger&"
+	}
+	a.redirect(writer, request, fmt.Sprintf("/events/%d?%smessage=%s#checklist", eventID, messageType, url.QueryEscape(message)), http.StatusSeeOther)
 }
 
 func (a *App) checklistOverride(writer http.ResponseWriter, request *http.Request) {

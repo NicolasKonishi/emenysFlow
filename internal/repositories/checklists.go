@@ -122,9 +122,15 @@ func (s *Store) GetChecklistByEvent(ctx context.Context, eventID int64) (models.
 		}
 		item.ManualItem, item.ManualOverride = manualItem == 1, manualOverride == 1
 		item.Active = active == 1
-		if separatedAt.Valid { item.SeparatedAt = parseTime(separatedAt.String) }
-		if loadedAt.Valid { item.LoadedAt = parseTime(loadedAt.String) }
-		if overrideAt.Valid { item.OverrideAt = parseTime(overrideAt.String) }
+		if separatedAt.Valid {
+			item.SeparatedAt = parseTime(separatedAt.String)
+		}
+		if loadedAt.Valid {
+			item.LoadedAt = parseTime(loadedAt.String)
+		}
+		if overrideAt.Valid {
+			item.OverrideAt = parseTime(overrideAt.String)
+		}
 		result.Items = append(result.Items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -140,10 +146,42 @@ func (s *Store) UpdateChecklistItemStatus(ctx context.Context, itemID int64, sta
 		return fmt.Errorf("invalid status")
 	}
 	now := nowString()
-	_, err := s.db.ExecContext(ctx, `UPDATE checklist_items SET status=?,separated_quantity=CASE WHEN ?='separated' THEN required_quantity ELSE separated_quantity END,
-		separated_by=CASE WHEN ?='separated' THEN ? ELSE separated_by END,separated_at=CASE WHEN ?='separated' THEN ? ELSE separated_at END,updated_at=? WHERE id=?`,
-		status, status, status, nullableUserID(userID), status, now, now, itemID)
+	_, err := s.db.ExecContext(ctx, `UPDATE checklist_items SET status=?,
+		separated_quantity=CASE WHEN ?='separated' THEN required_quantity WHEN ?='pending' THEN 0 ELSE separated_quantity END,
+		separated_by=CASE WHEN ?='separated' THEN ? WHEN ?='pending' THEN NULL ELSE separated_by END,
+		separated_at=CASE WHEN ?='separated' THEN ? WHEN ?='pending' THEN NULL ELSE separated_at END,
+		row_version=row_version+1,updated_at=? WHERE id=?`,
+		status, status, status, status, nullableUserID(userID), status, status, now, status, now, itemID)
 	return err
+}
+
+func (s *Store) UpdateChecklistItemsStatus(ctx context.Context, eventID int64, itemIDs []int64, status string, userID int64) error {
+	if status != "pending" && status != "separated" {
+		return fmt.Errorf("invalid group status")
+	}
+	if len(itemIDs) == 0 {
+		return fmt.Errorf("empty checklist group")
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(itemIDs)), ",")
+	now := nowString()
+	args := []any{status, status, status, status, nullableUserID(userID), status, status, now, status, now, eventID}
+	for _, id := range itemIDs {
+		args = append(args, id)
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE checklist_items SET status=?,
+		separated_quantity=CASE WHEN ?='separated' THEN required_quantity WHEN ?='pending' THEN 0 ELSE separated_quantity END,
+		separated_by=CASE WHEN ?='separated' THEN ? WHEN ?='pending' THEN NULL ELSE separated_by END,
+		separated_at=CASE WHEN ?='separated' THEN ? WHEN ?='pending' THEN NULL ELSE separated_at END,
+		row_version=row_version+1,updated_at=?
+		WHERE checklist_id=(SELECT id FROM checklists WHERE event_id=?) AND id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return err
+	}
+	updated, _ := result.RowsAffected()
+	if updated != int64(len(itemIDs)) {
+		return fmt.Errorf("checklist group changed while updating")
+	}
+	return nil
 }
 
 func (s *Store) OverrideChecklistItem(ctx context.Context, itemID int64, quantity float64, reason string, userID int64) error {
@@ -173,17 +211,24 @@ func checklistProgress(items []models.ChecklistItem) models.ChecklistProgress {
 		result.Percentage = int(float64(result.Completed)*100/float64(result.Total) + 0.5)
 		separated, loaded := 0.0, 0.0
 		for _, item := range items {
-			if item.RequiredQuantity <= 0 { continue }
+			if item.RequiredQuantity <= 0 {
+				continue
+			}
 			separated += minFloat(1, item.SeparatedQuantity/item.RequiredQuantity)
 			loaded += minFloat(1, item.LoadedQuantity/item.RequiredQuantity)
 		}
-		result.SeparationPercentage = int(separated*100/float64(result.Total)+0.5)
-		result.LoadingPercentage = int(loaded*100/float64(result.Total)+0.5)
+		result.SeparationPercentage = int(separated*100/float64(result.Total) + 0.5)
+		result.LoadingPercentage = int(loaded*100/float64(result.Total) + 0.5)
 	}
 	return result
 }
 
-func minFloat(a, b float64) float64 { if a < b { return a }; return b }
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 func nullInt64(value sql.NullInt64) any {
 	if value.Valid {

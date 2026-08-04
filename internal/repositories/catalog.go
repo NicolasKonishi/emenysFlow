@@ -334,9 +334,8 @@ func (s *Store) EventMenuRequirements(ctx context.Context, eventID int64) ([]mod
 	if eventMargin.Valid {
 		additionalMargin = eventMargin.Float64
 	}
-	var cubaInventoryID, rechaudInventoryID int64
+	var cubaInventoryID int64
 	_ = s.db.QueryRowContext(ctx, `SELECT id FROM inventory_items WHERE internal_code='CUB-001'`).Scan(&cubaInventoryID)
-	_ = s.db.QueryRowContext(ctx, `SELECT id FROM inventory_items WHERE internal_code='CUB-002'`).Scan(&rechaudInventoryID)
 	cubaCount := 0.0
 	rows, err := s.db.QueryContext(ctx, `SELECT em.id,COALESCE(NULLIF(m.display_name,''),m.name),category.slug,em.portions,COALESCE(em.overridden_container_quantity,em.calculated_container_quantity,1),ct.inventory_item_id,COALESCE(ct.quantity_mode,'per_event_type'),ct.fixed_quantity,m.pan_inventory_item_id,m.transport_inventory_item_id FROM event_menu_items em JOIN menu_items m ON m.id=em.menu_item_id JOIN menu_categories category ON category.id=m.category_id LEFT JOIN container_types ct ON ct.id=COALESCE(em.container_type_id,m.container_type_id) WHERE em.event_id=?`, eventID)
 	if err != nil {
@@ -405,20 +404,18 @@ func (s *Store) EventMenuRequirements(ctx context.Context, eventID int64) ([]mod
 		return nil, err
 	}
 	if cubaCount > 0 && cubaInventoryID > 0 {
+		serviceLines := 1.0
+		if guests > 100 {
+			serviceLines = 2
+		}
+		cubaCount *= serviceLines
 		key := "menu-cubas"
-		values[key] = aggregate{quantity: cubaCount, origin: fmt.Sprintf("%.0f pratos principais e acompanhamentos = %.0f cubas", cubaCount, cubaCount)}
+		origin := fmt.Sprintf("Uma cuba por prato principal ou acompanhamento = %.0f cubas", cubaCount)
+		if serviceLines == 2 {
+			origin = fmt.Sprintf("Evento acima de 100 convidados: duas filas de buffet = %.0f cubas", cubaCount)
+		}
+		values[key] = aggregate{quantity: cubaCount, origin: origin}
 		inventoryByKey[key] = cubaInventoryID
-		pansPerRechaud := 1.0
-		_ = s.db.QueryRowContext(ctx, `SELECT numeric_value FROM operational_settings WHERE setting_key='pans_per_rechaud'`).Scan(&pansPerRechaud)
-		if pansPerRechaud <= 0 {
-			pansPerRechaud = 1
-		}
-		if rechaudInventoryID > 0 {
-			key = "menu-rechauds"
-			quantity := math.Ceil(cubaCount / pansPerRechaud)
-			values[key] = aggregate{quantity: quantity, origin: fmt.Sprintf("%.0f cubas ÷ %.2g cubas por rechaud = %.0f rechauds", cubaCount, pansPerRechaud, quantity)}
-			inventoryByKey[key] = rechaudInventoryID
-		}
 	}
 	rows, err = s.db.QueryContext(ctx, `SELECT m.id,m.result_inventory_item_id,m.calculation_type,m.calculation_group,m.calculation_divisor,m.calculation_multiplier,m.calculation_weight,em.portions,COALESCE(NULLIF(m.display_name,''),m.name) FROM event_menu_items em JOIN menu_items m ON m.id=em.menu_item_id WHERE em.event_id=? AND m.result_inventory_item_id IS NOT NULL AND m.calculation_type<>'menu_only' ORDER BY m.calculation_group,m.id`, eventID)
 	if err != nil {

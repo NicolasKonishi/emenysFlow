@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Store) ListCategories(ctx context.Context) ([]models.Category, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, name, sort_order FROM inventory_categories WHERE active=1 ORDER BY sort_order, name")
+	rows, err := s.db.QueryContext(ctx, "SELECT id, name, internal_code_prefix, sort_order FROM inventory_categories WHERE active=1 ORDER BY sort_order, name")
 	if err != nil {
 		return nil, err
 	}
@@ -19,12 +19,18 @@ func (s *Store) ListCategories(ctx context.Context) ([]models.Category, error) {
 	var result []models.Category
 	for rows.Next() {
 		var item models.Category
-		if err := rows.Scan(&item.ID, &item.Name, &item.SortOrder); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.CodePrefix, &item.SortOrder); err != nil {
 			return nil, err
 		}
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) InventoryCategoryCodePrefix(ctx context.Context, id int64) (string, error) {
+	var prefix string
+	err := s.db.QueryRowContext(ctx, "SELECT internal_code_prefix FROM inventory_categories WHERE id=? AND active=1", id).Scan(&prefix)
+	return prefix, err
 }
 
 func (s *Store) ListLocations(ctx context.Context) ([]models.Location, error) {

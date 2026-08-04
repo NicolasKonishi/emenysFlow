@@ -148,6 +148,7 @@ func (a *App) Routes() http.Handler {
 	protected.HandleFunc("POST /events/{id}/reserve", a.eventReserve)
 	protected.HandleFunc("POST /events/{id}/duplicate", a.eventDuplicate)
 	protected.HandleFunc("POST /events/{id}/cancel", a.eventCancel)
+	protected.HandleFunc("POST /events/{id}/checklist/groups/{group}/status", a.checklistGroupStatus)
 	protected.HandleFunc("GET /events/{id}/menu-model/compare", a.eventMenuModelCompare)
 	protected.HandleFunc("POST /events/{id}/menu-model/reapply", a.eventMenuModelReapply)
 	protected.HandleFunc("POST /checklist/items/{id}/status", a.checklistStatus)

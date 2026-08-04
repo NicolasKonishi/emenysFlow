@@ -141,23 +141,43 @@ func (a *App) sharedEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildSimplePDF(event models.Event, checklist models.Checklist) []byte {
-	lines := []string{"BUFFET - " + event.ClientName + " - " + strconv.Itoa(event.GuestCount) + " pessoas", event.Name + " | " + event.Venue, event.StartsAt.Local().Format("02/01/2006 15:04"), ""}
-	category := ""
-	for _, item := range checklist.Items {
-		if item.CategoryName != category {
-			category = item.CategoryName
-			lines = append(lines, "", strings.ToUpper(category))
-		}
-		line := fmt.Sprintf("[  ] %g %s - %s", item.RequiredQuantity, item.Unit, item.Name)
-		if item.LocationSnapshot != "" {
-			line += " | " + item.LocationSnapshot
-		}
-		if item.MissingQuantity > 0 {
-			line += fmt.Sprintf(" | FALTAM %g", item.MissingQuantity)
-		}
-		lines = append(lines, line)
-	}
 	const perPage = 48
+	lines := []string{"BUFFET - " + event.ClientName + " - " + strconv.Itoa(event.GuestCount) + " pessoas", event.Name + " | " + event.Venue, event.StartsAt.Local().Format("02/01/2006 15:04"), ""}
+	if event.HasCake {
+		flavor := strings.TrimSpace(event.CakeNotes)
+		if flavor == "" {
+			flavor = "sabor a definir"
+		}
+		lines = append(lines, "BOLO: "+flavor, "")
+	} else {
+		lines = append(lines, "SEM BOLO", "")
+	}
+	if strings.TrimSpace(event.Notes) != "" {
+		lines = append(lines, "OBSERVACOES DA CHECKLIST")
+		lines = append(lines, strings.Split(strings.ReplaceAll(event.Notes, "\r\n", "\n"), "\n")...)
+		lines = append(lines, "")
+	}
+	for _, group := range groupChecklistForPDF(checklist.Items) {
+		if used := len(lines) % perPage; used != 0 && perPage-used < 3 {
+			for len(lines)%perPage != 0 {
+				lines = append(lines, "")
+			}
+		}
+		lines = append(lines, "", strings.ToUpper(group.Category))
+		for _, item := range group.Items {
+			line := fmt.Sprintf("[  ] %g %s - %s", item.RequiredQuantity, item.Unit, item.Name)
+			if item.CategoryName != "" {
+				line += " | " + item.CategoryName
+			}
+			if item.LocationSnapshot != "" {
+				line += " | " + item.LocationSnapshot
+			}
+			if item.MissingQuantity > 0 {
+				line += fmt.Sprintf(" | FALTAM %g", item.MissingQuantity)
+			}
+			lines = append(lines, line)
+		}
+	}
 	pages := (len(lines) + perPage - 1) / perPage
 	if pages < 1 {
 		pages = 1
@@ -205,9 +225,46 @@ func buildSimplePDF(event models.Event, checklist models.Checklist) []byte {
 	return out.Bytes()
 }
 
+func groupChecklistForPDF(items []models.ChecklistItem) []models.ChecklistGroup {
+	definitions := []models.ChecklistGroup{
+		{Key: "material", Category: "Material", Completed: true},
+		{Key: "food_drink", Category: "Comida / Bebida", Completed: true},
+		{Key: "decoration", Category: "Decoração", Completed: true},
+		{Key: "team", Category: "Equipe", Completed: true},
+	}
+	groupIndexes := map[string]int{"material": 0, "food_drink": 1, "decoration": 2, "team": 3}
+	for _, item := range items {
+		key := checklistPDFGroup(item)
+		index := groupIndexes[key]
+		definitions[index].Items = append(definitions[index].Items, item)
+		if !checklistStatusCompleted(item.Status) {
+			definitions[index].Completed = false
+		}
+	}
+	groups := make([]models.ChecklistGroup, 0, len(definitions))
+	for _, group := range definitions {
+		if len(group.Items) > 0 {
+			groups = append(groups, group)
+		}
+	}
+	return groups
+}
+
+func checklistPDFGroup(item models.ChecklistItem) string {
+	operationalGroup := checklistOperationalGroup(item)
+	if operationalGroup != "material" {
+		return operationalGroup
+	}
+	switch strings.ToLower(strings.TrimSpace(item.CategoryName)) {
+	case "comidas", "bebidas", "bolo e doces", "sobremesas":
+		return "food_drink"
+	}
+	return "material"
+}
+
 func pdfEscape(value string) string {
 	return strings.NewReplacer("\\", "\\\\", "(", "\\(", ")", "\\)").Replace(value)
 }
 func asciiText(value string) string {
-	return strings.NewReplacer("á", "a", "à", "a", "ã", "a", "â", "a", "Á", "A", "é", "e", "ê", "e", "É", "E", "í", "i", "Í", "I", "ó", "o", "ô", "o", "õ", "o", "Ó", "O", "ú", "u", "Ú", "U", "ç", "c", "Ç", "C", "—", "-", "–", "-").Replace(value)
+	return strings.NewReplacer("á", "a", "à", "a", "ã", "a", "â", "a", "Á", "A", "À", "A", "Ã", "A", "Â", "A", "é", "e", "ê", "e", "É", "E", "Ê", "E", "í", "i", "Í", "I", "ó", "o", "ô", "o", "õ", "o", "Ó", "O", "Ô", "O", "Õ", "O", "ú", "u", "Ú", "U", "ç", "c", "Ç", "C", "—", "-", "–", "-").Replace(value)
 }

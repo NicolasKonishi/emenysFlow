@@ -5,6 +5,7 @@
     <span class="badge {{statusClass .Event.Status}}">{{statusLabel .Event.Status}}</span>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
+  {{if .Event.Notes}}<aside class="panel checklist-notes"><span class="eyebrow">Observações da checklist</span><ul>{{range observationLines .Event.Notes}}<li>{{.}}</li>{{end}}</ul></aside>{{end}}
   <div class="stage-rail"><span class="done">Planejamento</span><span class="done">Reserva</span><span {{if eq .Operation.Stage "separating"}}class="active"{{end}}>Separação</span><span {{if eq .Operation.Stage "checking"}}class="active"{{end}}>Conferência</span><span {{if eq .Operation.Stage "loading"}}class="active"{{end}}>Carregamento</span><span {{if eq .Operation.Stage "in_progress"}}class="active"{{end}}>Evento</span><span>Retorno</span></div>
 
   <form class="form-layout" action="/events/{{.Event.ID}}/operation/{{.Operation.Stage}}" method="post">

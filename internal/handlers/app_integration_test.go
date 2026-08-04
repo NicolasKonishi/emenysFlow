@@ -126,6 +126,76 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		if path == "/events/new" && (!strings.Contains(string(body), "Itens que serão alugados") || !strings.Contains(string(body), `name="rented_decoration_color"`)) {
 			t.Error("new event form is missing the rented decoration editor")
 		}
+		if path == "/events/new" && (!strings.Contains(string(body), `name="checklist_observations"`) || !strings.Contains(string(body), `data-add-checklist-observation`) || !strings.Contains(string(body), `data-remove-checklist-observation`)) {
+			t.Error("new event form is missing the editable checklist observations")
+		}
+		if path == "/events/new" && (!strings.Contains(string(body), `name="has_cake"`) || !strings.Contains(string(body), `<strong>Tem bolo</strong>`) || !strings.Contains(string(body), `name="cake_notes"`) || !strings.Contains(string(body), `class="cake-flavor-field" data-cake-flavor-field hidden`)) {
+			t.Error("new event form is missing the optional cake and flavor controls")
+		}
+		if path == "/inventory/new" && (!strings.Contains(string(body), `data-code-prefix="CUB"`) || !strings.Contains(string(body), `data-inventory-code-mode="create"`) || !strings.Contains(string(body), `name="internal_code"`)) {
+			t.Error("new inventory item form is missing automatic internal code metadata")
+		}
+		if path == "/events/1" && (!strings.Contains(string(body), `/checklist/groups/material/status`) || !strings.Contains(string(body), `data-group-check`)) {
+			t.Error("event checklist is missing the whole-group check control")
+		}
+	}
+
+	response, err = client.PostForm(server.URL+"/inventory", url.Values{
+		"name":            {"Cuba de Réchaud"},
+		"internal_code":   {"CODIGO-ALTERADO-NO-NAVEGADOR"},
+		"category_id":     {"3"},
+		"unit":            {"unidade"},
+		"item_kind":       {"reusable"},
+		"ownership":       {"owned"},
+		"requires_return": {"on"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("create inventory item final status %d", response.StatusCode)
+	}
+	var generatedInternalCode string
+	if err := store.DB().QueryRowContext(ctx, "SELECT internal_code FROM inventory_items WHERE name=?", "Cuba de Réchaud").Scan(&generatedInternalCode); err != nil {
+		t.Fatal(err)
+	}
+	if generatedInternalCode != "CUB-cuba-de-rechaud" {
+		t.Fatalf("generated inventory code = %q, want %q", generatedInternalCode, "CUB-cuba-de-rechaud")
+	}
+
+	demoChecklist, err := store.GetChecklistByEvent(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var materialItemIDs []int64
+	for _, group := range groupChecklist(demoChecklist.Items) {
+		if group.Key == "material" {
+			for _, item := range group.Items {
+				materialItemIDs = append(materialItemIDs, item.ID)
+			}
+		}
+	}
+	if len(materialItemIDs) == 0 {
+		t.Fatal("demo checklist should contain material items")
+	}
+	response, err = client.PostForm(server.URL+"/events/1/checklist/groups/material/status", url.Values{"status": {"separated"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("whole material group check final status %d", response.StatusCode)
+	}
+	for _, itemID := range materialItemIDs {
+		var status string
+		var required, separated float64
+		if err := store.DB().QueryRowContext(ctx, "SELECT status,required_quantity,separated_quantity FROM checklist_items WHERE id=?", itemID).Scan(&status, &required, &separated); err != nil {
+			t.Fatal(err)
+		}
+		if status != "separated" || separated != required {
+			t.Fatalf("material item %d status=%q separated=%.0f required=%.0f", itemID, status, separated, required)
+		}
 	}
 
 	var syncItemID int64
@@ -184,6 +254,9 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	}
 	if !createdEvent.TemplateID.Valid || createdEvent.TemplateID.Int64 != 2 {
 		t.Fatalf("event template got %+v, want 2", createdEvent.TemplateID)
+	}
+	if createdEvent.HasCake || createdEvent.CakeNotes != "" {
+		t.Fatalf("event without cake got has_cake=%v flavor=%q", createdEvent.HasCake, createdEvent.CakeNotes)
 	}
 	templateSelection, err := store.MenuTemplateSelection(ctx, 2)
 	if err != nil {
@@ -267,10 +340,12 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	}
 	choiceRows.Close()
 	advancedForm := url.Values{
-		"menu_model_id":      {fmt.Sprint(advancedModelID)},
-		"service_model_ids":  {fmt.Sprint(barServiceID)},
-		"kitchen_cook_id":    {fmt.Sprint(kitchenCookID)},
-		"model_custom_items": {"Receita exclusiva de integração"},
+		"menu_model_id":          {fmt.Sprint(advancedModelID)},
+		"service_model_ids":      {fmt.Sprint(barServiceID)},
+		"kitchen_cook_id":        {fmt.Sprint(kitchenCookID)},
+		"checklist_observations": {"Levar caixa térmica extra", "Avisar a equipe da separação"},
+		"has_cake":               {"on"},
+		"cake_notes":             {"Chocolate com morango"},
 		fmt.Sprintf("model_portions_%d", fixedTemplateItemID):  {"120"},
 		fmt.Sprintf("model_container_%d", fixedTemplateItemID): {fmt.Sprint(containerID)},
 		"client_name":           {"Cliente avançado"},
@@ -309,8 +384,29 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE checklist.event_id=? AND item.source_key LIKE 'kitchen-cook-box:%'`, advancedEventID).Scan(&checklistCookBoxCount); err != nil {
 		t.Fatal(err)
 	}
-	if customSnapshotCount != 1 || serviceSnapshotCount != 1 || checklistServiceCount != 1 || checklistCookBoxCount != 1 {
+	if customSnapshotCount != 0 || serviceSnapshotCount != 1 || checklistServiceCount != 0 || checklistCookBoxCount != 1 {
 		t.Fatalf("advanced workflow custom=%d services=%d checklist-service=%d cook-boxes=%d", customSnapshotCount, serviceSnapshotCount, checklistServiceCount, checklistCookBoxCount)
+	}
+	var checklistNotes string
+	if err := store.DB().QueryRowContext(ctx, "SELECT notes FROM events WHERE id=?", advancedEventID).Scan(&checklistNotes); err != nil {
+		t.Fatal(err)
+	}
+	if checklistNotes != "Levar caixa térmica extra\nAvisar a equipe da separação" {
+		t.Fatalf("checklist notes = %q", checklistNotes)
+	}
+	advancedEvent, err := store.GetEvent(ctx, advancedEventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !advancedEvent.HasCake || advancedEvent.CakeNotes != "Chocolate com morango" {
+		t.Fatalf("advanced event cake got has_cake=%v flavor=%q", advancedEvent.HasCake, advancedEvent.CakeNotes)
+	}
+	var selectedCakeItems int
+	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND LOWER(section.name) LIKE '%bolo%' AND item.selected=1 AND item.was_removed=0`, advancedEventID).Scan(&selectedCakeItems); err != nil {
+		t.Fatal(err)
+	}
+	if selectedCakeItems == 0 {
+		t.Fatal("event with cake should keep the cake section selected")
 	}
 	var editableItemID int64
 	var editableName string

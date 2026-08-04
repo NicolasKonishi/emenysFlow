@@ -114,10 +114,42 @@ func (s *Store) GetEventCakeConfiguration(ctx context.Context, eventID int64) (m
 }
 
 func (s *Store) SaveEventCakeConfiguration(ctx context.Context, configuration models.EventCakeConfiguration, userID int64) error {
-	if configuration.CakeCount < 0 {
-		return fmt.Errorf("cake count cannot be negative")
+	if configuration.CakeCount < 1 {
+		return fmt.Errorf("cake count must be at least one")
+	}
+	var hasCake int
+	if err := s.db.QueryRowContext(ctx, "SELECT has_cake FROM events WHERE id=?", configuration.EventID).Scan(&hasCake); err != nil {
+		return err
+	}
+	if hasCake == 0 {
+		return fmt.Errorf("event does not include cake")
 	}
 	now := nowString()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO event_cake_configurations(event_id,cake_count,requires_refrigeration,notes,row_version,updated_by,created_at,updated_at) VALUES(?,?,?,?,1,?,?,?) ON CONFLICT(event_id) DO UPDATE SET cake_count=excluded.cake_count,requires_refrigeration=excluded.requires_refrigeration,notes=excluded.notes,row_version=event_cake_configurations.row_version+1,updated_by=excluded.updated_by,updated_at=excluded.updated_at`, configuration.EventID, configuration.CakeCount, configuration.RequiresRefrigeration, strings.TrimSpace(configuration.Notes), nullableUserID(userID), now, now)
 	return err
+}
+
+func (s *Store) SyncEventCakePresence(ctx context.Context, eventID, userID int64) error {
+	return withTx(ctx, s.db, func(tx *sql.Tx) error {
+		var hasCake int
+		if err := tx.QueryRowContext(ctx, "SELECT has_cake FROM events WHERE id=?", eventID).Scan(&hasCake); err != nil {
+			return err
+		}
+		now := nowString()
+		selected := 0
+		if hasCake == 1 {
+			selected = 1
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE event_menu_snapshot_items SET selected=CASE WHEN ?=1 AND was_removed=0 THEN 1 ELSE 0 END,changed_by=?,updated_at=?
+			WHERE event_menu_section_id IN (SELECT section.id FROM event_menu_sections section JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND LOWER(section.name) LIKE '%bolo%')`, selected, nullableUserID(userID), now, eventID); err != nil {
+			return err
+		}
+		if hasCake == 0 {
+			_, err := tx.ExecContext(ctx, "UPDATE event_cake_configurations SET cake_count=0,requires_refrigeration=0,notes='',updated_by=?,updated_at=? WHERE event_id=?", nullableUserID(userID), now, eventID)
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO event_cake_configurations(event_id,cake_count,requires_refrigeration,notes,row_version,updated_by,created_at,updated_at)
+			VALUES(?,1,0,'',1,?,?,?) ON CONFLICT(event_id) DO UPDATE SET cake_count=CASE WHEN event_cake_configurations.cake_count<1 THEN 1 ELSE event_cake_configurations.cake_count END,row_version=event_cake_configurations.row_version+1,updated_by=excluded.updated_by,updated_at=excluded.updated_at`, eventID, nullableUserID(userID), now, now)
+		return err
+	})
 }

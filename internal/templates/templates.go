@@ -43,6 +43,9 @@ func NewRenderer() *Renderer {
 		"calcTypeLabel":           calculationTypeLabel,
 		"percent":                 func(value float64) int { return int(math.Round(value)) },
 		"positive":                func(value float64) bool { return value > 0 },
+		"checklistDone":           checklistDone,
+		"observationLines":        observationLines,
+		"cakeSection":             isCakeSection,
 		"inputNumber":             func(value float64) string { return fmt.Sprintf("%g", value) },
 		"money":                   func(cents int64) string { return fmt.Sprintf("R$ %.2f", float64(cents)/100) },
 		"div":                     func(value int64, divisor float64) float64 { return float64(value) / divisor },
@@ -70,6 +73,32 @@ func NewRenderer() *Renderer {
 			return item.LoadedQuantity
 		},
 	}}
+}
+
+func isCakeSection(value string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(value)), "bolo")
+}
+
+func observationLines(value string) []string {
+	var result []string
+	for _, line := range strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			result = append(result, line)
+		}
+	}
+	if len(result) == 0 {
+		return []string{""}
+	}
+	return result
+}
+
+func checklistDone(status string) bool {
+	switch status {
+	case "separated", "checked", "loaded", "at_event", "returned", "not_applicable":
+		return true
+	default:
+		return false
+	}
 }
 
 func fixedRechaudSection(name string) bool {

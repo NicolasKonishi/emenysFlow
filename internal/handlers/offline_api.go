@@ -186,9 +186,21 @@ func (a *App) applyOfflineEventDraft(r *http.Request, eventID int64, baseVersion
 	event.HasDecoration = boolValue(payload["has_decoration"])
 	event.HasWelcomeDrinks = boolValue(payload["has_welcome_drinks"])
 	event.HasCoffeeTable = boolValue(payload["has_coffee_table"])
+	event.HasCake = boolValue(payload["has_cake"])
+	event.CakeNotes = ""
+	if event.HasCake {
+		event.CakeNotes = strings.TrimSpace(stringValue(payload["cake_notes"]))
+	}
 	event.UsesGlassware = boolValue(payload["uses_glassware"])
-	event.Notes = stringValue(payload["notes"])
+	if observations, exists := payload["checklist_observations"]; exists {
+		event.Notes = joinedStringValues(observations)
+	} else {
+		event.Notes = stringValue(payload["notes"])
+	}
 	if err := a.store.SaveEvent(r.Context(), &event, userID); err != nil {
+		return err
+	}
+	if err := a.store.SyncEventCakePresence(r.Context(), event.ID, userID); err != nil {
 		return err
 	}
 	_, err = a.checklist.GenerateTracked(r.Context(), event.ID, "offline_event_synced", userID)
@@ -222,6 +234,28 @@ func stringValue(value any) string {
 		return ""
 	}
 }
+
+func joinedStringValues(value any) string {
+	var values []string
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			values = append(values, stringValue(item))
+		}
+	case []string:
+		values = typed
+	default:
+		values = []string{stringValue(value)}
+	}
+	clean := make([]string, 0, len(values))
+	for _, item := range values {
+		if item = strings.TrimSpace(item); item != "" {
+			clean = append(clean, item)
+		}
+	}
+	return strings.Join(clean, "\n")
+}
+
 func numberValue(value any) float64 {
 	switch typed := value.(type) {
 	case float64:

@@ -28,6 +28,7 @@ type Event struct {
 	HasDecoration                 bool
 	HasWelcomeDrinks              bool
 	HasCoffeeTable                bool
+	HasCake                       bool
 	StartersNotes                 string
 	MainCoursesNotes              string
 	SidesNotes                    string
@@ -118,9 +119,10 @@ type InventoryItem struct {
 }
 
 type Category struct {
-	ID        int64
-	Name      string
-	SortOrder int
+	ID         int64
+	Name       string
+	CodePrefix string
+	SortOrder  int
 }
 
 type Location struct {
@@ -233,8 +235,10 @@ type ChecklistProgress struct {
 }
 
 type ChecklistGroup struct {
-	Category string
-	Items    []ChecklistItem
+	Key       string
+	Category  string
+	Items     []ChecklistItem
+	Completed bool
 }
 
 type Dashboard struct {

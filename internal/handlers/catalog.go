@@ -590,6 +590,15 @@ func (a *App) eventMenuForm(w http.ResponseWriter, r *http.Request) {
 	data.Event = event
 	if hasSnapshot, _ := a.store.EventHasMenuSnapshot(r.Context(), id); hasSnapshot {
 		data.SnapshotSections, err = a.store.EventMenuSnapshotSections(r.Context(), id)
+		if !event.HasCake {
+			filtered := make([]models.EventMenuSnapshotSection, 0, len(data.SnapshotSections))
+			for _, section := range data.SnapshotSections {
+				if !strings.Contains(strings.ToLower(strings.TrimSpace(section.Name)), "bolo") {
+					filtered = append(filtered, section)
+				}
+			}
+			data.SnapshotSections = filtered
+		}
 		data.MenuItems, _ = a.store.ListMenuItems(r.Context(), false)
 		data.Containers, _ = a.store.ListContainerTypes(r.Context(), false)
 		data.Equipment, _ = a.store.EquipmentOptions(r.Context())

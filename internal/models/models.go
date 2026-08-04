@@ -404,13 +404,24 @@ type InventoryMovement struct {
 }
 
 type EventDecoration struct {
-	DecorationID    int64
-	Name            string
-	UsageLocation   string
-	Color           string
-	Model           string
-	Ownership       string
-	InventoryItemID sql.NullInt64
-	Quantity        float64
-	Selected        bool
+	DecorationID        int64
+	Name                string
+	UsageLocation       string
+	Color               string
+	Model               string
+	Ownership           string
+	RentalCompany       string
+	PhotoURL            string
+	Notes               string
+	InventoryItemID     sql.NullInt64
+	Unit                string
+	StockQuantity       float64
+	DamagedQuantity     float64
+	ReservedQuantity    float64
+	AvailableQuantity   float64
+	AvailabilityTracked bool
+	Selectable          bool
+	Quantity            float64
+	Selected            bool
+	Active              bool
 }

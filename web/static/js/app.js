@@ -291,7 +291,9 @@ function initializeEventDecorationToggle(root = document) {
     const form = toggle.closest("form");
     const section = form?.querySelector("[data-event-decoration-section]");
     if (!section) return;
-    const hasSavedData = section.querySelector('input[name="decoration_theme"]')?.value || section.querySelector('textarea[name="decoration_description"]')?.value;
+    const hasSavedData = section.querySelector('input[name="decoration_theme"]')?.value
+      || section.querySelector('textarea[name="decoration_description"]')?.value
+      || section.querySelector('input[name="decoration_ids"]:checked');
     toggle.addEventListener("change", () => {
       if (!toggle.checked && hasSavedData && !window.confirm("Desativar a decoração? Os dados preenchidos serão preservados, mas itens e reservas deixarão de ser gerados.")) {
         toggle.checked = true;

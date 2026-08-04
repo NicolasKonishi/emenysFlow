@@ -15,7 +15,7 @@ O projeto implementa o fluxo funcional completo, do cadastro e cálculo até o r
 - cardápios-modelo reutilizáveis, escolhidos ao criar a festa para preencher automaticamente todas as seções e itens;
 - serviços-modelo selecionáveis no evento, com componentes, duração, configuração e materiais operacionais;
 - CRUD independente de seções, itens, grupos de escolha e componentes, com criação, edição, remoção lógica e duplicação;
-- biblioteca versionada em **Modelos**, com 14 cardápios e 11 serviços carregados do banco;
+- biblioteca versionada em **Modelos**, com 14 cardápios e 9 serviços terceirizados carregados do banco;
 - seções e grupos de escolha configuráveis, blocos compartilhados e regras de mínimo/máximo;
 - snapshot versionado por evento: a festa preserva o cardápio, os serviços e seus materiais mesmo após o modelo original mudar;
 - comparação manual com a versão atual do cardápio e reaplicação opcional, preservando escolhas e personalizações da festa;
@@ -103,7 +103,7 @@ O seed inclui:
 
 - evento `BUFFET — Íris do Campo — 200 pessoas` para daqui a aproximadamente 14 dias;
 - cardápio com entradas, pratos principais e acompanhamentos;
-- 14 cardápios-modelo e 11 serviços-modelo, prontos para seleção e personalização por evento;
+- 14 cardápios-modelo e 9 serviços terceirizados, prontos para seleção e personalização por evento;
 - bebidas distribuídas entre Coca-Cola, Guaraná, suco de laranja e suco de uva;
 - três itens de decoração;
 - localizações e itens iniciais de estoque, incluindo cubas, panelas e utensílios;

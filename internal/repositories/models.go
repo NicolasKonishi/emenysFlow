@@ -266,7 +266,7 @@ func (s *Store) ListServiceModels(ctx context.Context, includeInactive bool) ([]
 		(SELECT COUNT(*) FROM service_template_components component WHERE component.service_template_id=service.id AND component.active=1 AND component.deleted_at IS NULL),
 		service.created_at,service.updated_at
 		FROM service_templates service
-		WHERE service.deleted_at IS NULL AND (?=1 OR service.active=1)
+		WHERE service.deleted_at IS NULL AND service.category<>'decoracao' AND (?=1 OR service.active=1)
 		ORDER BY service.active DESC,service.name`, includeInactive)
 	if err != nil {
 		return nil, fmt.Errorf("list service models: %w", err)

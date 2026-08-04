@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="/static/icons/icon.svg">
   <link rel="stylesheet" href="/static/css/app.css?v=8">
   <script defer src="https://unpkg.com/htmx.org@2.0.7/dist/htmx.min.js"></script>
-  <script defer src="/static/js/app.js?v=6"></script>
+  <script defer src="/static/js/app.js?v=5"></script>
   <script defer src="/static/js/offline.js?v=3"></script>
 </head>
 <body {{if .User.ID}}class="app-shell" hx-boost="true" hx-target="#app-main" hx-push-url="true"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>

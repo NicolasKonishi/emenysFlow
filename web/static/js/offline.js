@@ -56,23 +56,18 @@
   const getAll = (store) => useStore(store, "readonly", (target) => target.getAll());
 
   async function updateStatus(message, state) {
+    const resolvedState = state || (navigator.onLine ? "online" : "offline");
     const connection = document.querySelector("[data-connection-state]");
     if (connection) {
       connection.textContent = message || (navigator.onLine ? "Online" : "Offline");
-      connection.dataset.state = state || (navigator.onLine ? "online" : "offline");
+      connection.dataset.state = resolvedState;
     }
     const operations = await getAll("operations").catch(() => []);
     const photos = await getAll("photos").catch(() => []);
-    const pending = operations.filter((item) => ["pending", "syncing", "failed", "conflict"].includes(item.status)).length
+    const pending = operations.filter((item) => ["pending", "syncing", "failed"].includes(item.status)).length
       + photos.filter((item) => ["pending", "syncing", "failed"].includes(item.status)).length;
-    document.querySelectorAll("[data-pending-count]").forEach((node) => {
-      node.textContent = `${pending} ${pending === 1 ? "operação pendente" : "operações pendentes"}`;
-      node.classList.toggle("has-pending", pending > 0);
-    });
-    const sync = await getRecord("meta", "last_sync").catch(() => null);
-    document.querySelectorAll("[data-last-sync]").forEach((node) => {
-      node.textContent = sync?.value ? `Última sincronização: ${new Date(sync.value).toLocaleString("pt-BR")}` : "Ainda não sincronizado";
-    });
+    const statusBar = document.querySelector("[data-sync-status-bar]");
+    if (statusBar) statusBar.hidden = !(resolvedState === "syncing" || resolvedState === "error" || pending > 0);
   }
 
   async function refreshBootstrap() {
@@ -241,10 +236,18 @@
 
   async function syncOperations() {
     if (!navigator.onLine || synchronizing) return;
+    const all = await getAll("operations").catch(() => []);
+    const photos = await getAll("photos").catch(() => []);
+    const hasPendingUpdates = all.some((item) => item.status === "pending" || item.status === "failed")
+      || photos.some((item) => item.status === "pending" || item.status === "failed");
+    if (!hasPendingUpdates) {
+      refreshBootstrap().catch(() => null);
+      await updateStatus();
+      return;
+    }
     synchronizing = true;
     await updateStatus("Sincronizando…", "syncing");
     try {
-      const all = await getAll("operations");
       const pending = all.filter((item) => item.status === "pending" || item.status === "failed").slice(0, 100);
       if (pending.length) {
         for (const item of pending) {
@@ -270,7 +273,7 @@
       await syncPhotos();
       await refreshBootstrap();
       renderConflicts();
-      await updateStatus("Online e sincronizado", "online");
+      await updateStatus();
     } catch (error) {
       const operations = await getAll("operations").catch(() => []);
       for (const operation of operations.filter((item) => item.status === "syncing")) {
@@ -387,27 +390,25 @@
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-sync-now]")) syncOperations();
-    if (event.target.closest("[data-apply-update]") && registration?.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
     if (event.target.closest("[data-close-conflicts]")) document.querySelector("[data-conflict-panel]").hidden = true;
   });
   window.addEventListener("online", () => syncOperations());
   window.addEventListener("offline", () => updateStatus("Offline — alterações serão guardadas", "offline"));
   navigator.serviceWorker?.addEventListener("message", (event) => {
-    if (event.data?.type === "NEW_VERSION") document.querySelector("[data-update-notice]")?.removeAttribute("hidden");
     if (event.data?.type === "SYNC_REQUESTED") syncOperations();
   });
-  navigator.serviceWorker?.addEventListener("controllerchange", () => location.reload());
+  let reloadingForUpdate = false;
+  navigator.serviceWorker?.addEventListener("controllerchange", () => {
+    if (reloadingForUpdate) return;
+    reloadingForUpdate = true;
+    location.reload();
+  });
 
   document.addEventListener("DOMContentLoaded", async () => {
     if ("serviceWorker" in navigator) {
       registration = await navigator.serviceWorker.register("/sw.js").catch(() => null);
-      if (registration?.waiting) document.querySelector("[data-update-notice]")?.removeAttribute("hidden");
-      registration?.addEventListener("updatefound", () => {
-        const worker = registration.installing;
-        worker?.addEventListener("statechange", () => {
-          if (worker.state === "installed" && navigator.serviceWorker.controller) document.querySelector("[data-update-notice]")?.removeAttribute("hidden");
-        });
-      });
+      registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
+      registration?.update().catch(() => null);
     }
     await updateStatus();
     await renderConflicts();

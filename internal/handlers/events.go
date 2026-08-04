@@ -57,6 +57,7 @@ func (a *App) eventForm(writer http.ResponseWriter, request *http.Request) {
 	if data.Event.ID > 0 {
 		data.DecorationProfile, _ = a.store.GetDecorationProfile(request.Context(), data.Event.ID)
 	}
+	data.Decorations, _ = a.store.EventDecorationSelectionForWindow(request.Context(), data.Event.ID, data.Event.StartsAt, data.Event.EndsAt)
 	a.populateEventModelData(request, &data, modelID, selectedItemIDs, serviceIDs)
 	data.KitchenCooks, _ = a.store.ListKitchenCooks(request.Context(), false)
 	if data.Event.ID > 0 && modelID > 0 {
@@ -139,6 +140,13 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 	itemNames := parseMenuModelItemNames(request)
 	sectionCustomItems := parseMenuModelSectionCustomItems(request)
 	itemConfigurations := parseMenuModelConfigurations(request)
+	var decorationSelection []models.EventDecoration
+	if err == nil {
+		decorationSelection, err = a.store.EventDecorationSelectionForWindow(request.Context(), id, event.StartsAt, event.EndsAt)
+		if err == nil {
+			decorationSelection, err = applyEventDecorationForm(request, decorationSelection, event.HasDecoration)
+		}
+	}
 	if err == nil && event.KitchenCookID.Valid {
 		if cookErr := a.store.ValidateKitchenCook(request.Context(), event.KitchenCookID.Int64); cookErr != nil {
 			err = fmt.Errorf("Selecione uma cozinheira ativa ou deixe o campo em branco.")
@@ -181,6 +189,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		data.KitchenCooks, _ = a.store.ListKitchenCooks(request.Context(), false)
 		data.MenuCustomized = id > 0 || request.FormValue("menu_customized") == "1"
 		data.ModelCustomItems = request.FormValue("model_custom_items")
+		data.Decorations = decorationSelection
 		a.populateEventModelData(request, &data, menuModelID, modelItemIDs, serviceModelIDs)
 		a.render(writer, request, "event_form", data)
 		return
@@ -200,6 +209,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		data.KitchenCooks, _ = a.store.ListKitchenCooks(request.Context(), false)
 		data.MenuCustomized = id > 0 || request.FormValue("menu_customized") == "1"
 		data.ModelCustomItems = request.FormValue("model_custom_items")
+		data.Decorations = decorationSelection
 		a.populateEventModelData(request, &data, menuModelID, modelItemIDs, serviceModelIDs)
 		a.render(writer, request, "event_form", data)
 		return
@@ -221,6 +231,12 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 			}
 		}
 	}
+	if event.HasDecoration {
+		if decorationErr := a.store.SaveEventDecorations(request.Context(), event.ID, decorationSelection); decorationErr != nil {
+			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(decorationErr))), http.StatusSeeOther)
+			return
+		}
+	}
 	for index := range selection {
 		selection[index].EventID = event.ID
 	}
@@ -235,6 +251,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		data.KitchenCooks, _ = a.store.ListKitchenCooks(request.Context(), false)
 		data.MenuCustomized = true
 		data.ModelCustomItems = request.FormValue("model_custom_items")
+		data.Decorations = decorationSelection
 		a.populateEventModelData(request, &data, menuModelID, modelItemIDs, serviceModelIDs)
 		a.render(writer, request, "event_form", data)
 		return
@@ -278,6 +295,32 @@ func formInt64Values(request *http.Request, name string) []int64 {
 		}
 	}
 	return result
+}
+
+func applyEventDecorationForm(request *http.Request, items []models.EventDecoration, enabled bool) ([]models.EventDecoration, error) {
+	selected := map[int64]bool{}
+	for _, id := range formInt64Values(request, "decoration_ids") {
+		selected[id] = true
+	}
+	for index := range items {
+		item := &items[index]
+		item.Selected = enabled && selected[item.DecorationID]
+		if !item.Selected {
+			continue
+		}
+		if !item.AvailabilityTracked || !item.Selectable {
+			return items, fmt.Errorf("%s não está disponível no estoque para a data do evento.", item.Name)
+		}
+		quantity := parseFloat(request.FormValue(fmt.Sprintf("decoration_quantity_%d", item.DecorationID)))
+		if quantity <= 0 {
+			quantity = item.Quantity
+		}
+		if quantity <= 0 || quantity > item.AvailableQuantity+0.0001 {
+			return items, fmt.Errorf("%s possui somente %s disponível para a data do evento.", item.Name, strconv.FormatFloat(item.AvailableQuantity, 'f', -1, 64))
+		}
+		item.Quantity = quantity
+	}
+	return items, nil
 }
 
 func formLines(value string) []string {

@@ -363,7 +363,7 @@ func TestChecklistIncludesSelectedServiceMaterials(t *testing.T) {
 	}
 	var selected []int64
 	for _, model := range models {
-		if model.Slug == "bar" || model.Slug == "decoracao" || model.Slug == "robo-de-led" {
+		if model.Slug == "bar" || model.Slug == "robo-de-led" {
 			selected = append(selected, model.ID)
 		}
 	}
@@ -378,13 +378,10 @@ func TestChecklistIncludesSelectedServiceMaterials(t *testing.T) {
 	for _, item := range checklist.Items {
 		items[item.Name] = item.RequiredQuantity
 	}
-	for _, name := range []string{"Gelo", "Canudo", "Copo de acrílico", "Robô de LED", "Canhão de CO2", "Mesa redonda"} {
+	for _, name := range []string{"Gelo", "Canudo", "Copo de acrílico", "Robô de LED", "Canhão de CO2"} {
 		if items[name] <= 0 {
 			t.Fatalf("service material %q missing from checklist: %#v", name, items)
 		}
-	}
-	if items["Mesa redonda"] != 25 {
-		t.Fatalf("table requirement got %.0f, want 25 for 200 guests", items["Mesa redonda"])
 	}
 }
 

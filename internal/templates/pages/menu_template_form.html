@@ -1,0 +1,28 @@
+{{define "content"}}
+<div class="page-wrap narrow">
+  <header class="page-header"><div><a class="back-link" href="/catalog">← Voltar aos cardápios</a><h1>{{if .IsEdit}}Editar cardápio{{else}}Novo cardápio{{end}}</h1><p>{{if .IsEdit}}Cada item abaixo pertence somente a este cardápio e pode ser editado separadamente.{{else}}Crie o modelo e escolha itens do catálogo para gerar cópias independentes.{{end}}</p></div></header>
+  {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
+  <form class="form-layout" action="{{.FormAction}}" method="post">
+    <section class="panel form-section">
+      <div class="section-heading"><span>1</span><div><h2>Identificação</h2><p>Use um nome comercial fácil de reconhecer durante o atendimento.</p></div></div>
+      <div class="form-grid two"><label>Nome do cardápio<input name="name" value="{{.MenuTemplate.Name}}" placeholder="Ex.: Casamento Mineiro Completo" required></label><label class="span-2">Descrição<textarea name="description" rows="3" placeholder="Resumo da proposta e ocasiões indicadas">{{.MenuTemplate.Description}}</textarea></label></div>
+    </section>
+    <section class="panel form-section">
+      <div class="section-heading"><span>2</span><div><h2>Serviços incluídos</h2><p>Estas opções também serão preenchidas ao escolher o cardápio no evento.</p></div></div>
+      <div class="option-grid"><label class="toggle-card"><input type="checkbox" name="has_decoration" {{if .MenuTemplate.HasDecoration}}checked{{end}}><span class="toggle"></span><span><strong>Decoração</strong><small>Incluída no modelo</small></span></label><label class="toggle-card"><input type="checkbox" name="has_welcome_drinks" {{if .MenuTemplate.HasWelcomeDrinks}}checked{{end}}><span class="toggle"></span><span><strong>Welcome drinks</strong><small>Incluído no modelo</small></span></label><label class="toggle-card"><input type="checkbox" name="has_coffee_table" {{if .MenuTemplate.HasCoffeeTable}}checked{{end}}><span class="toggle"></span><span><strong>Mesa de café</strong><small>Incluída no modelo</small></span></label></div>
+    </section>
+    {{if .IsEdit}}
+    <section class="panel form-section">
+      <div class="section-heading"><span>3</span><div><h2>Itens exclusivos deste cardápio</h2><p>Adicionar, editar ou remover aqui não altera os demais modelos.</p></div><a class="button primary small section-action" href="/catalog/templates/{{.MenuTemplate.ID}}/items/new">＋ Adicionar item</a></div>
+      <div class="template-crud-list">{{$category := ""}}{{range .MenuItems}}{{if not (eq .CategoryName $category)}}{{$category = .CategoryName}}<h3>{{.CategoryName}}</h3>{{end}}<article class="template-crud-item {{if not .Active}}is-inactive{{end}}"><div><strong>{{.Name}}</strong><small>{{if .Description}}{{.Description}}{{else}}Sem descrição{{end}}</small></div><span class="badge {{if .Active}}success{{else}}neutral{{end}}">{{if .Active}}Ativo{{else}}Removido{{end}}</span><a class="button ghost small" href="/catalog/templates/{{$.MenuTemplate.ID}}/items/{{.ID}}/edit">Editar</a><button class="button ghost small" type="submit" formaction="/catalog/templates/{{$.MenuTemplate.ID}}/items/{{.ID}}/toggle" formnovalidate>{{if .Active}}Remover{{else}}Restaurar{{end}}</button></article>{{else}}<div class="empty-state"><strong>Este cardápio ainda não tem itens</strong><p>Adicione uma entrada, acompanhamento, prato ou bebida exclusiva.</p><a class="button primary small" href="/catalog/templates/{{.MenuTemplate.ID}}/items/new">Adicionar primeiro item</a></div>{{end}}</div>
+    </section>
+    {{else}}
+    <section class="panel form-section">
+      <div class="section-heading"><span>3</span><div><h2>Itens iniciais</h2><p>Os itens escolhidos serão copiados. Depois você editará cada cópia separadamente.</p></div></div>
+      <div class="template-item-groups">{{$category := ""}}{{range .EventMenu}}{{if not (eq .CategoryName $category)}}{{$category = .CategoryName}}<h3>{{.CategoryName}}</h3>{{end}}<label class="template-item-choice"><input type="checkbox" name="menu_item_ids" value="{{.MenuItemID}}" {{if .Selected}}checked{{end}}><span class="choice-check">✓</span><span><strong>{{.MenuItemName}}</strong><small>{{.CategoryName}}</small></span></label>{{else}}<div class="empty-state"><strong>Nenhum item cadastrado</strong><p>Cadastre primeiro os itens do catálogo geral.</p></div>{{end}}</div>
+    </section>
+    {{end}}
+    <div class="form-actions"><a class="button secondary" href="/catalog">Cancelar</a><button class="button primary">{{if .IsEdit}}Salvar dados do cardápio{{else}}Criar cardápio e copiar itens{{end}}</button></div>
+  </form>
+</div>
+{{end}}

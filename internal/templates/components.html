@@ -1,0 +1,23 @@
+{{define "menu_model_selection"}}
+<div class="event-model-preview">
+  {{if .CurrentMenuModelID}}
+    {{range .ModelSections}}
+    <section class="model-preview-section">
+      <header><div><span class="eyebrow">{{.SectionType}}</span><h3>{{.Name}}</h3></div>{{if .AllowEventChanges}}<span class="badge info">Editável no evento</span>{{end}}</header>
+      {{range .Items}}{{$item := .}}{{if and .Active .Included}}<div class="model-choice fixed"><input type="checkbox" checked disabled><input type="hidden" name="model_item_ids" value="{{.ID}}"><span><strong>{{.NormalizedName}}</strong><small>Incluído no modelo</small></span><span class="item-event-config"><input type="number" min="0.01" step="0.01" name="model_portions_{{.ID}}" value="{{if .Portions.Valid}}{{inputNumber .Portions.Float64}}{{end}}" placeholder="Porções" aria-label="Porções de {{.NormalizedName}}"><select name="model_container_{{.ID}}" aria-label="Recipiente de {{.NormalizedName}}"><option value="">Recipiente padrão</option>{{range $.Containers}}<option value="{{.ID}}" {{if and $item.ContainerTypeID.Valid (eq .ID $item.ContainerTypeID.Int64)}}selected{{end}}>{{.Name}}</option>{{end}}</select></span></div>{{end}}{{end}}
+      {{range .ChoiceGroups}}
+      <fieldset class="choice-fieldset">
+        <legend>{{.Name}}</legend>
+        <p>Escolha {{if and .SelectionMax.Valid (eq .SelectionMin .SelectionMax.Int64)}}exatamente {{.SelectionMin}}{{else}}no mínimo {{.SelectionMin}}{{if .SelectionMax.Valid}} e no máximo {{.SelectionMax.Int64}}{{end}}{{end}}.</p>
+        <div class="model-choice-grid">{{range .Items}}{{$item := .}}<label class="model-choice"><input type="checkbox" name="model_item_ids" value="{{.ID}}" {{if .Selected}}checked{{end}}><span><strong>{{.NormalizedName}}</strong>{{if .Description}}<small>{{.Description}}</small>{{end}}</span><span class="item-event-config"><input type="number" min="0.01" step="0.01" name="model_portions_{{.ID}}" value="{{if .Portions.Valid}}{{inputNumber .Portions.Float64}}{{end}}" placeholder="Porções" aria-label="Porções de {{.NormalizedName}}"><select name="model_container_{{.ID}}" aria-label="Recipiente de {{.NormalizedName}}"><option value="">Recipiente padrão</option>{{range $.Containers}}<option value="{{.ID}}" {{if and $item.ContainerTypeID.Valid (eq .ID $item.ContainerTypeID.Int64)}}selected{{end}}>{{.Name}}</option>{{end}}</select></span></label>{{end}}</div>
+      </fieldset>
+      {{end}}
+      <div class="model-choice-grid">{{range .Items}}{{$item := .}}{{if and .Active (not .Included) (not .InChoiceGroup)}}<label class="model-choice"><input type="checkbox" name="model_item_ids" value="{{.ID}}" {{if .Selected}}checked{{end}}><span><strong>{{.NormalizedName}}</strong><small>Item opcional</small></span><span class="item-event-config"><input type="number" min="0.01" step="0.01" name="model_portions_{{.ID}}" value="{{if .Portions.Valid}}{{inputNumber .Portions.Float64}}{{end}}" placeholder="Porções" aria-label="Porções de {{.NormalizedName}}"><select name="model_container_{{.ID}}" aria-label="Recipiente de {{.NormalizedName}}"><option value="">Recipiente padrão</option>{{range $.Containers}}<option value="{{.ID}}" {{if and $item.ContainerTypeID.Valid (eq .ID $item.ContainerTypeID.Int64)}}selected{{end}}>{{.Name}}</option>{{end}}</select></span></label>{{end}}{{end}}</div>
+    </section>
+    {{end}}
+    <p class="form-hint">Ao salvar, o sistema cria uma cópia deste cardápio para o evento. Alterações futuras no modelo não mudam o contrato já criado.</p>
+  {{else}}
+    <div class="empty-state compact"><strong>Nenhum modelo selecionado.</strong><span>Escolha um modelo para preencher o cardápio e liberar suas opções.</span></div>
+  {{end}}
+</div>
+{{end}}

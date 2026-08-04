@@ -1,0 +1,19 @@
+{
+  "name": "emenysFlow — Gestão de eventos",
+  "short_name": "emenysFlow",
+  "description": "Planejamento, estoque e checklist operacional para buffet.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f5f1",
+  "theme_color": "#173f38",
+  "icons": [
+    { "src": "/static/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Eventos", "short_name": "Eventos", "url": "/events" },
+    { "name": "Nova festa", "short_name": "Nova festa", "url": "/events/new" }
+  ]
+}

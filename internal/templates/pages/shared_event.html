@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="public-header">
+  <div class="brand"><span class="brand-mark">EF</span><span><strong>emenysFlow</strong><small>Checklist compartilhada</small></span></div>
+  <span class="badge info">Somente leitura</span>
+</div>
+<div class="page-wrap shared-page">
+  <header class="event-hero">
+    <div><span class="eyebrow">{{dateTime .Event.StartsAt}}</span><h1>BUFFET — {{.Event.ClientName}} — {{.Event.GuestCount}} pessoas</h1><p>{{.Event.Name}} · {{.Event.Venue}}</p></div>
+    <button class="button secondary" type="button" data-print>Imprimir</button>
+  </header>
+  <section class="checklist-overview panel">
+    <div class="progress-ring" style="--progress:{{.Checklist.Progress.Percentage}}"><strong>{{.Checklist.Progress.Percentage}}%</strong><small>concluído</small></div>
+    <div class="overview-copy"><h2>{{.Checklist.Progress.Completed}} de {{.Checklist.Progress.Total}} itens prontos</h2><div class="progress-line large"><span style="width:{{.Checklist.Progress.Percentage}}%"></span></div></div>
+  </section>
+  {{range .Groups}}
+  <section class="category-group panel" open>
+    <summary><span>{{.Category}}</span><small>{{len .Items}} itens</small></summary>
+    <div class="checklist-items">
+      {{range .Items}}
+      <article class="check-item public-item">
+        <span class="round-check {{if eq .Status "separated"}}checked{{end}}">{{if eq .Status "separated"}}✓{{end}}</span>
+        <div class="check-main"><strong>{{.Name}}</strong><p>{{.LocationSnapshot}}</p></div>
+        <div class="quantity-stack"><strong>{{number .RequiredQuantity}}</strong><span>{{.Unit}}</span></div>
+        <div class="availability">{{if positive .MissingQuantity}}<b>Faltam {{number .MissingQuantity}}</b>{{else}}<small class="success-text">Coberto</small>{{end}}</div>
+      </article>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+</div>
+{{end}}

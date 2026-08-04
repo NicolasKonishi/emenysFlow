@@ -1,0 +1,377 @@
+package handlers
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"buffetflow/internal/database"
+	"buffetflow/internal/repositories"
+	"buffetflow/internal/services"
+)
+
+func TestMainPagesRenderAfterLogin(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "web-test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := database.Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	store := repositories.New(db)
+	auth := services.NewAuthService(store)
+	if err := auth.EnsureDemoAdmin(ctx); err != nil {
+		t.Fatal(err)
+	}
+	checklist := services.NewChecklistService(store)
+	if err := checklist.EnsureDemoChecklist(ctx); err != nil {
+		t.Fatal(err)
+	}
+	location, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := New(store, auth, checklist, slog.New(slog.NewTextHandler(io.Discard, nil)), location)
+	server := httptest.NewServer(app.Routes())
+	defer server.Close()
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	response, err := client.PostForm(server.URL+"/login", url.Values{"email": {"admin@buffet.local"}, "password": {"admin123"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("login final status %d", response.StatusCode)
+	}
+
+	checks := map[string]string{
+		"/":                    "Próximos eventos",
+		"/events":              "Íris do Campo",
+		"/models":              "Buffet Especial",
+		"/models?tab=services": "Totem fotográfico",
+		"/models/menus/7":      "Adicionar à seção",
+		"/models/services/7":   "Adicionar componente",
+		"/events/new":          `name="kitchen_cook_id"`,
+		"/events/menu-model-preview?menu_model_id=7": "Escolha de entradas",
+		"/events/1":                      "Íris do Campo",
+		"/events/1/pdf":                  "Compartilhar / WhatsApp",
+		"/inventory":                     "Copo descartável",
+		"/inventory/kitchen-boxes":       "Caixas das cozinheiras",
+		"/inventory/kitchen-boxes/box/1": "Utensílios e temperos dentro da caixa",
+		"/inventory/new":                 "Novo item",
+		"/rules":                         "Garçons por convidados",
+		"/rules/new":                     "Nova regra",
+		"/catalog":                       "Cardápios e recipientes",
+		"/catalog/templates/new":         "Crie o modelo",
+		"/catalog/templates/1/items/new": "Copiar do catálogo geral",
+		"/catalog/items/new":             "Novo item do cardápio",
+		"/catalog/items/1/edit":          "Receita e ingredientes",
+		"/catalog/containers/new":        "Novo recipiente",
+		"/events/1/menu":                 "Cardápio do evento",
+		"/events/1/decorations":          "Decoração do evento",
+		"/events/1/operation":            "Sincronizar agora",
+		"/events/1/operation/separating": "Separação do estoque",
+		"/events/1/operation/loading":    "Checklist rápido para a van",
+		"/events/1/return":               "Retorno dos itens",
+		"/inventory/2/movements":         "Últimas movimentações",
+		"/settings":                      "Configurações",
+		"/settings/users/new":            "Novo usuário",
+		"/manifest.webmanifest":          "emenysFlow",
+		"/static/offline.html":           "Eventos disponíveis neste aparelho",
+		"/static/js/offline.js":          "buffetflow-offline",
+		"/sw.js":                         `CACHE_VERSION = "v9"`,
+		"/api/offline/bootstrap":         `"schema_version":1`,
+		"/static/css/app.css":            "--brand",
+	}
+	for path, expected := range checks {
+		response, err := client.Get(server.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		body, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Errorf("GET %s status %d", path, response.StatusCode)
+		}
+		if !strings.Contains(string(body), expected) {
+			t.Errorf("GET %s missing %q in response", path, expected)
+		}
+	}
+
+	var syncItemID int64
+	var syncVersion int
+	if err := store.DB().QueryRowContext(ctx, `SELECT item.id,item.row_version FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE checklist.event_id=1 AND item.active=1 ORDER BY item.id LIMIT 1`).Scan(&syncItemID, &syncVersion); err != nil {
+		t.Fatal(err)
+	}
+	syncPayload := fmt.Sprintf(`[{"client_operation_id":"integration-operation-1","device_id":"integration-device","operation_type":"update_quantity","entity_type":"checklist_item","entity_id":%d,"base_version":%d,"payload":{"event_id":1,"stage":"separation","quantity":0,"notes":"teste offline"},"local_date":"2026-08-03T12:00:00Z"}]`, syncItemID, syncVersion)
+	for attempt := 0; attempt < 2; attempt++ {
+		request, err := http.NewRequest(http.MethodPost, server.URL+"/api/sync/operations", strings.NewReader(syncPayload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK || !strings.Contains(string(body), `"status":"synced"`) {
+			t.Fatalf("offline sync attempt %d got status %d: %s", attempt+1, response.StatusCode, body)
+		}
+	}
+	var recordedOperations int
+	if err := store.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_operations WHERE client_operation_id='integration-operation-1'").Scan(&recordedOperations); err != nil || recordedOperations != 1 {
+		t.Fatalf("idempotent sync operation count=%d err=%v", recordedOperations, err)
+	}
+
+	starts := time.Now().In(location).AddDate(0, 1, 0).Truncate(time.Minute)
+	ends := starts.Add(8 * time.Hour)
+	response, err = client.PostForm(server.URL+"/events", url.Values{
+		"template_id":           {"2"},
+		"client_name":           {"Cliente do modelo"},
+		"name":                  {"Festa criada pelo cardápio-base"},
+		"venue":                 {"Salão de testes"},
+		"starts_at":             {starts.Format("2006-01-02T15:04")},
+		"ends_at":               {ends.Format("2006-01-02T15:04")},
+		"guest_count":           {"100"},
+		"safety_margin_percent": {"10"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("create event from menu template final status %d", response.StatusCode)
+	}
+	var createdEventID int64
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM events WHERE name=?", "Festa criada pelo cardápio-base").Scan(&createdEventID); err != nil {
+		t.Fatal(err)
+	}
+	createdEvent, err := store.GetEvent(ctx, createdEventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !createdEvent.TemplateID.Valid || createdEvent.TemplateID.Int64 != 2 {
+		t.Fatalf("event template got %+v, want 2", createdEvent.TemplateID)
+	}
+	templateSelection, err := store.MenuTemplateSelection(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventSelection, err := store.EventMenuSelection(ctx, createdEventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	templateSelected, eventSelected := 0, 0
+	for _, item := range templateSelection {
+		if item.Selected {
+			templateSelected++
+		}
+	}
+	for _, item := range eventSelection {
+		if item.Selected {
+			eventSelected++
+		}
+	}
+	if templateSelected == 0 || eventSelected != templateSelected {
+		t.Fatalf("event copied %d template items, want %d", eventSelected, templateSelected)
+	}
+	for index := range eventSelection {
+		if eventSelection[index].Selected {
+			eventSelection[index].Selected = false
+			break
+		}
+	}
+	if err := store.SaveEventMenu(ctx, createdEventID, eventSelection); err != nil {
+		t.Fatal(err)
+	}
+	templateAfterEventEdit, err := store.MenuTemplateSelection(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selectedAfterEventEdit := 0
+	for _, item := range templateAfterEventEdit {
+		if item.Selected {
+			selectedAfterEventEdit++
+		}
+	}
+	if selectedAfterEventEdit != templateSelected {
+		t.Fatalf("editing event changed its template: got %d items, want %d", selectedAfterEventEdit, templateSelected)
+	}
+
+	var advancedModelID, barServiceID, fixedTemplateItemID, containerID, adminID, kitchenCookID int64
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM menu_templates WHERE slug='buffet-carnes'").Scan(&advancedModelID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM service_templates WHERE slug='bar'").Scan(&barServiceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, `SELECT item.id FROM menu_template_items item JOIN menu_template_sections section ON section.id=item.menu_template_section_id WHERE section.menu_template_id=? AND item.included=1 ORDER BY item.id LIMIT 1`, advancedModelID).Scan(&fixedTemplateItemID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM container_types WHERE active=1 ORDER BY id LIMIT 1").Scan(&containerID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM users WHERE email='admin@buffet.local'").Scan(&adminID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM kitchen_cooks WHERE slug='geriane'").Scan(&kitchenCookID); err != nil {
+		t.Fatal(err)
+	}
+	choiceRows, err := store.DB().QueryContext(ctx, `SELECT choice.id,item.id FROM menu_choice_groups choice JOIN menu_template_sections section ON section.id=choice.menu_template_section_id JOIN menu_choice_group_items membership ON membership.menu_choice_group_id=choice.id JOIN menu_template_items item ON item.id=membership.menu_template_item_id WHERE section.menu_template_id=? ORDER BY choice.id,membership.sort_order`, advancedModelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groupCounts := map[int64]int{}
+	var advancedChoices []int64
+	for choiceRows.Next() {
+		var groupID, itemID int64
+		if err := choiceRows.Scan(&groupID, &itemID); err != nil {
+			t.Fatal(err)
+		}
+		if groupCounts[groupID] < 2 {
+			advancedChoices = append(advancedChoices, itemID)
+			groupCounts[groupID]++
+		}
+	}
+	choiceRows.Close()
+	advancedForm := url.Values{
+		"menu_model_id":      {fmt.Sprint(advancedModelID)},
+		"service_model_ids":  {fmt.Sprint(barServiceID)},
+		"kitchen_cook_id":    {fmt.Sprint(kitchenCookID)},
+		"model_custom_items": {"Receita exclusiva de integração"},
+		fmt.Sprintf("model_portions_%d", fixedTemplateItemID):  {"120"},
+		fmt.Sprintf("model_container_%d", fixedTemplateItemID): {fmt.Sprint(containerID)},
+		"client_name":           {"Cliente avançado"},
+		"name":                  {"Evento com snapshot avançado"},
+		"venue":                 {"Salão de integração"},
+		"starts_at":             {starts.AddDate(0, 1, 0).Format("2006-01-02T15:04")},
+		"ends_at":               {ends.AddDate(0, 1, 0).Format("2006-01-02T15:04")},
+		"guest_count":           {"120"},
+		"safety_margin_percent": {"10"},
+	}
+	for _, itemID := range advancedChoices {
+		advancedForm.Add("model_item_ids", fmt.Sprint(itemID))
+	}
+	response, err = client.PostForm(server.URL+"/events", advancedForm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("create event from advanced model final status %d", response.StatusCode)
+	}
+	var advancedEventID int64
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM events WHERE name='Evento com snapshot avançado'").Scan(&advancedEventID); err != nil {
+		t.Fatal(err)
+	}
+	var customSnapshotCount, serviceSnapshotCount, checklistServiceCount, checklistCookBoxCount int
+	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND item.custom_item=1`, advancedEventID).Scan(&customSnapshotCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM event_services WHERE event_id=?", advancedEventID).Scan(&serviceSnapshotCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE checklist.event_id=? AND item.name='Gelo'`, advancedEventID).Scan(&checklistServiceCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE checklist.event_id=? AND item.source_key LIKE 'kitchen-cook-box:%'`, advancedEventID).Scan(&checklistCookBoxCount); err != nil {
+		t.Fatal(err)
+	}
+	if customSnapshotCount != 1 || serviceSnapshotCount != 1 || checklistServiceCount != 1 || checklistCookBoxCount != 1 {
+		t.Fatalf("advanced workflow custom=%d services=%d checklist-service=%d cook-boxes=%d", customSnapshotCount, serviceSnapshotCount, checklistServiceCount, checklistCookBoxCount)
+	}
+	var editableItemID int64
+	var editableName string
+	var included, configurable int
+	if err := store.DB().QueryRowContext(ctx, `SELECT item.id,item.normalized_name,item.included,item.configurable FROM menu_template_items item JOIN menu_template_sections section ON section.id=item.menu_template_section_id WHERE section.menu_template_id=? ORDER BY item.id LIMIT 1`, advancedModelID).Scan(&editableItemID, &editableName, &included, &configurable); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateMenuModelItem(ctx, advancedModelID, editableItemID, editableName+" revisão", "", included == 1, configurable == 1, adminID); err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Get(fmt.Sprintf("%s/events/%d/menu-model/compare", server.URL, advancedEventID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareBody, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(compareBody), "Atualização disponível") || !strings.Contains(string(compareBody), "Personalizações preservadas") {
+		t.Fatalf("model comparison did not render: status=%d", response.StatusCode)
+	}
+
+	request, _ := http.NewRequest(http.MethodGet, server.URL+"/events", nil)
+	request.Header.Set("HX-Request", "true")
+	response, err = client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if strings.Contains(string(body), "<!doctype html>") {
+		t.Error("HTMX response should contain only page content")
+	}
+	if !strings.Contains(string(body), "Eventos") {
+		t.Error("HTMX response is missing page content")
+	}
+	for _, path := range []string{"/events/1/export.csv", "/events/1/export.pdf"} {
+		response, err = client.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ = io.ReadAll(response.Body)
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK || len(body) < 20 {
+			t.Errorf("export %s failed", path)
+		}
+	}
+	response, err = client.Get(server.URL + "/events/1/export.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition := response.Header.Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline;") {
+		t.Errorf("inline PDF disposition got %q", disposition)
+	}
+	if framePolicy := response.Header.Get("X-Frame-Options"); framePolicy != "SAMEORIGIN" {
+		t.Errorf("PDF frame policy got %q", framePolicy)
+	}
+	response.Body.Close()
+	response, err = client.Get(server.URL + "/events/1/export.pdf?download=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disposition := response.Header.Get("Content-Disposition"); !strings.HasPrefix(disposition, "attachment;") {
+		t.Errorf("download PDF disposition got %q", disposition)
+	}
+	response.Body.Close()
+	token := "integration-share-token"
+	sum := sha256.Sum256([]byte(token))
+	if err := store.CreateEventShare(ctx, 1, hex.EncodeToString(sum[:]), 1); err != nil {
+		t.Fatal(err)
+	}
+	response, err = client.Get(server.URL + "/share/" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(response.Body)
+	response.Body.Close()
+	if !strings.Contains(string(body), "Somente leitura") {
+		t.Error("shared event did not render")
+	}
+}

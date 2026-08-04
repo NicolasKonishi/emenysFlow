@@ -1,0 +1,5 @@
+/data/*.db
+/data/*.db-*
+/buffetflow.exe
+/coverage.out
+.DS_Store

@@ -1,0 +1,10 @@
+{{define "content"}}
+<div class="page-wrap narrow">
+  <header class="page-header"><div><a class="back-link" href="/events/{{.Event.ID}}/edit">← Voltar ao evento</a><span class="eyebrow">Comparação segura</span><h1>{{.MenuModel.Name}}</h1><p>{{.Event.Name}} · snapshot v{{.MenuModelSnapshotVersion}} · modelo atual v{{.MenuModelCurrentVersion}}</p></div></header>
+  {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
+  <section class="panel comparison-panel"><header><div><span class="eyebrow">Alterações encontradas</span><h2>Diferenças entre o evento e o modelo</h2></div><span class="badge {{if .MenuModelOutdated}}warning{{else}}success{{end}}">{{if .MenuModelOutdated}}Atualização disponível{{else}}Sincronizado{{end}}</span></header>
+    <div class="difference-list">{{range .ModelDifferences}}<article><span class="badge {{if eq .Kind "added"}}success{{else if eq .Kind "removed"}}danger{{else}}warning{{end}}">{{if eq .Kind "added"}}Adicionado{{else if eq .Kind "removed"}}Removido{{else}}Alterado{{end}}</span><div><strong>{{.ItemName}}</strong><small>{{.Detail}}</small></div></article>{{else}}<div class="empty-state compact">Não há diferenças de itens entre as versões.</div>{{end}}</div>
+  </section>
+  <div class="snapshot-preservation panel"><div><strong>Personalizações preservadas</strong><p>A reaplicação mantém escolhas ainda existentes, itens personalizados, porções e recipientes definidos neste evento. Se uma nova regra obrigatória precisar de escolha, o sistema solicitará revisão.</p></div>{{if .MenuModelOutdated}}<form action="/events/{{.Event.ID}}/menu-model/reapply" method="post"><button class="button primary">Aplicar versão {{.MenuModelCurrentVersion}}</button></form>{{end}}</div>
+</div>
+{{end}}

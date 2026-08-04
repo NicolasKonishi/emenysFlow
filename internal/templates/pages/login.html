@@ -1,0 +1,18 @@
+{{define "content"}}
+<section class="login-card">
+  <div class="login-brand"><span class="brand-mark large">EF</span><div><strong>emenysFlow</strong><small>Operação em ordem</small></div></div>
+  <div class="login-intro">
+    <span class="eyebrow">Bem-vindo de volta</span>
+    <h1>Entre para organizar o próximo evento.</h1>
+    <p>Planejamento, estoque e conferência em uma única rotina.</p>
+  </div>
+  {{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
+  {{if .Flash}}<div class="alert info" role="status">{{.Flash}}</div>{{end}}
+  <form action="/login" method="post" class="form-stack">
+    <label>E-mail<input type="email" name="email" value="admin@buffet.local" autocomplete="username" required autofocus></label>
+    <label>Senha<input type="password" name="password" value="admin123" autocomplete="current-password" required></label>
+    <button class="button primary full" type="submit">Entrar no sistema</button>
+  </form>
+  <p class="demo-hint"><strong>Acesso de demonstração</strong><br>admin@buffet.local · admin123</p>
+</section>
+{{end}}

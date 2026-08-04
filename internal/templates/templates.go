@@ -47,6 +47,9 @@ func NewRenderer() *Renderer {
 		"money":                   func(cents int64) string { return fmt.Sprintf("R$ %.2f", float64(cents)/100) },
 		"div":                     func(value int64, divisor float64) float64 { return float64(value) / divisor },
 		"sub":                     func(a, b float64) float64 { return math.Max(0, a-b) },
+		"fixedRechaudSection":     fixedRechaudSection,
+		"noContainerSection":      noContainerSection,
+		"rechaudContainerID":      rechaudContainerID,
 		"shortageResolutionLabel": shortageResolutionLabel,
 		"eq":                      func(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) },
 		"operationQty": func(item models.ChecklistItem, stage string) float64 {
@@ -67,6 +70,31 @@ func NewRenderer() *Renderer {
 			return item.LoadedQuantity
 		},
 	}}
+}
+
+func fixedRechaudSection(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	return normalized == "buffet principal" || normalized == "acompanhamentos" || normalized == "pratos principais"
+}
+
+func noContainerSection(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	switch normalized {
+	case "bebidas", "mesa do café", "mesa de café", "doces", "material", "materiais", "equipe":
+		return true
+	default:
+		return false
+	}
+}
+
+func rechaudContainerID(containers []models.ContainerType) int64 {
+	for _, container := range containers {
+		normalized := strings.ToLower(strings.TrimSpace(container.Name))
+		if normalized == "cuba gn 1/1" {
+			return container.ID
+		}
+	}
+	return 0
 }
 
 func shortageResolutionLabel(value string) string {

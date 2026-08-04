@@ -22,7 +22,7 @@ func (s *Store) EventMenuSnapshotSections(ctx context.Context, eventID int64) ([
 		CASE WHEN LOWER(section.name) LIKE '%entrada%' OR LOWER(section.name) LIKE '%sobremesa%' OR LOWER(section.name) LIKE '%bolo%' THEN 1 ELSE 0 END
 		FROM event_menu_sections section JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id
 		LEFT JOIN event_menu_snapshot_items item ON item.event_menu_section_id=section.id
-		WHERE snapshot.event_id=? ORDER BY section.sort_order,section.id,item.sort_order,item.id`, eventID)
+		WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') ORDER BY section.sort_order,section.id,item.sort_order,item.id`, eventID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +199,7 @@ func (s *Store) SyncLegacyEventMenuFromSnapshot(ctx context.Context, eventID int
 		SELECT ?,item.source_menu_item_id,CAST(COALESCE(item.portions,event.guest_count) AS INTEGER),item.container_type_id,
 		CASE WHEN COALESCE(source.container_capacity_portions,container.capacity_portions,0)>0 THEN CEIL(COALESCE(item.portions,event.guest_count)/COALESCE(source.container_capacity_portions,container.capacity_portions)) ELSE 1 END,item.notes,?,?
 		FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id JOIN events event ON event.id=snapshot.event_id JOIN menu_items source ON source.id=item.source_menu_item_id LEFT JOIN container_types container ON container.id=COALESCE(item.container_type_id,source.container_type_id)
-		WHERE snapshot.event_id=? AND item.selected=1 AND item.was_removed=0 AND item.source_menu_item_id IS NOT NULL`, eventID, now, now, eventID)
+		WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') AND item.selected=1 AND item.was_removed=0 AND item.source_menu_item_id IS NOT NULL`, eventID, now, now, eventID)
 		return err
 	})
 }

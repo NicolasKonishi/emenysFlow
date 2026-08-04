@@ -11,6 +11,11 @@ import (
 	"buffetflow/internal/models"
 )
 
+func isCoffeeTableSection(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	return normalized == "mesa de café" || normalized == "mesa do café"
+}
+
 func (s *Store) ValidateMenuModelSelections(ctx context.Context, modelID int64, selectedIDs []int64) error {
 	selected := make(map[int64]bool, len(selectedIDs))
 	for _, id := range selectedIDs {
@@ -86,7 +91,7 @@ func (s *Store) MenuModelMenuItemIDs(ctx context.Context, modelID int64, selecte
 		if err := rows.Scan(&templateItemID, &menuItemID, &included); err != nil {
 			return nil, err
 		}
-		if included == 1 || selected[templateItemID] {
+		if selected[templateItemID] {
 			result = append(result, menuItemID)
 		}
 	}
@@ -94,10 +99,15 @@ func (s *Store) MenuModelMenuItemIDs(ctx context.Context, modelID int64, selecte
 }
 
 func (s *Store) ApplyMenuModelSnapshot(ctx context.Context, eventID, modelID int64, selectedIDs []int64, customItems []string, userID int64) error {
+	return s.ApplyMenuModelSnapshotWithCustomizations(ctx, eventID, modelID, selectedIDs, customItems, nil, nil, userID)
+}
+
+func (s *Store) ApplyMenuModelSnapshotWithCustomizations(ctx context.Context, eventID, modelID int64, selectedIDs []int64, customItems []string, itemNames map[int64]string, sectionCustomItems map[int64][]string, userID int64) error {
 	if err := s.ValidateMenuModelSelections(ctx, modelID, selectedIDs); err != nil {
 		return err
 	}
 	selected := make(map[int64]bool, len(selectedIDs))
+	explicitSelection := selectedIDs != nil
 	for _, id := range selectedIDs {
 		selected[id] = true
 	}
@@ -135,6 +145,9 @@ func (s *Store) ApplyMenuModelSnapshot(ctx context.Context, eventID, modelID int
 				sections.Close()
 				return err
 			}
+			if isCoffeeTableSection(sectionName) {
+				continue
+			}
 			sectionResult, err := tx.ExecContext(ctx, `INSERT INTO event_menu_sections(event_menu_template_id,source_template_section_id,name,section_type,sort_order,selection_min,selection_max,allow_event_changes,notes) VALUES(?,?,?,?,?,?,?,?,?)`, snapshotID, sourceID, sectionName, sectionType, sortOrder, min, nullInt64(max), allow, notes)
 			if err != nil {
 				sections.Close()
@@ -161,8 +174,12 @@ func (s *Store) ApplyMenuModelSnapshot(ctx context.Context, eventID, modelID int
 					sections.Close()
 					return err
 				}
-				isSelected := included == 1 || selected[itemID]
-				result, insertErr := tx.ExecContext(ctx, `INSERT INTO event_menu_snapshot_items(event_menu_section_id,source_template_item_id,source_menu_item_id,source_label,normalized_name,display_name,description,sort_order,selected,notes,original_snapshot_json,changed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,json_object('display_name',?,'description',?,'section_id',?,'sort_order',?),?,?,?)`, eventSectionID, itemID, nullInt64(menuItemID), label, normalized, label, itemDescription, itemSort, isSelected, itemNotes, label, itemDescription, eventSectionID, itemSort, nullableUserID(userID), now, now)
+				isSelected := selected[itemID] || (!explicitSelection && included == 1)
+				displayName := label
+				if override := strings.TrimSpace(itemNames[itemID]); override != "" {
+					displayName = override
+				}
+				result, insertErr := tx.ExecContext(ctx, `INSERT INTO event_menu_snapshot_items(event_menu_section_id,source_template_item_id,source_menu_item_id,source_label,normalized_name,display_name,description,sort_order,selected,notes,original_snapshot_json,changed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,json_object('display_name',?,'description',?,'section_id',?,'sort_order',?),?,?,?)`, eventSectionID, itemID, nullInt64(menuItemID), label, normalized, displayName, itemDescription, itemSort, isSelected, itemNotes, label, itemDescription, eventSectionID, itemSort, nullableUserID(userID), now, now)
 				err = insertErr
 				if err != nil {
 					items.Close()
@@ -185,6 +202,15 @@ func (s *Store) ApplyMenuModelSnapshot(ctx context.Context, eventID, modelID int
 				return err
 			}
 			items.Close()
+			for index, customItem := range sectionCustomItems[sourceID] {
+				customItem = strings.TrimSpace(customItem)
+				if customItem == "" {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx, `INSERT INTO event_menu_snapshot_items(event_menu_section_id,source_label,normalized_name,display_name,sort_order,selected,custom_item,is_customized,original_snapshot_json,changed_by,created_at,updated_at) VALUES(?,?,?,?,?,1,1,1,json_object('display_name',?,'section_id',?,'sort_order',?),?,?,?)`, eventSectionID, customItem, customItem, customItem, index+1, customItem, eventSectionID, index+1, nullableUserID(userID), now, now); err != nil {
+					return err
+				}
+			}
 		}
 		if err := sections.Err(); err != nil {
 			sections.Close()
@@ -231,7 +257,7 @@ func (s *Store) EventMenuModelSelection(ctx context.Context, eventID int64) (int
 	rows, err := s.db.QueryContext(ctx, `SELECT item.source_template_item_id FROM event_menu_snapshot_items item
 		JOIN event_menu_sections section ON section.id=item.event_menu_section_id
 		JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id
-		WHERE snapshot.event_id=? AND item.selected=1 AND item.source_template_item_id IS NOT NULL`, eventID)
+		WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') AND item.selected=1 AND item.source_template_item_id IS NOT NULL`, eventID)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -251,7 +277,7 @@ func (s *Store) EventMenuModelCustomItems(ctx context.Context, eventID int64) ([
 	rows, err := s.db.QueryContext(ctx, `SELECT item.normalized_name FROM event_menu_snapshot_items item
 		JOIN event_menu_sections section ON section.id=item.event_menu_section_id
 		JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id
-		WHERE snapshot.event_id=? AND item.custom_item=1 AND item.selected=1 ORDER BY item.sort_order,item.id`, eventID)
+		WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') AND item.custom_item=1 AND item.selected=1 ORDER BY item.sort_order,item.id`, eventID)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +302,7 @@ func (s *Store) EventMenuModelStatus(ctx context.Context, eventID int64) (snapsh
 }
 
 func (s *Store) EventMenuModelItemConfigurations(ctx context.Context, eventID int64) (map[int64]models.EventMenuItemConfiguration, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT item.source_template_item_id,item.portions,item.container_type_id FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND item.source_template_item_id IS NOT NULL`, eventID)
+	rows, err := s.db.QueryContext(ctx, `SELECT item.source_template_item_id,item.portions,item.container_type_id FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') AND item.source_template_item_id IS NOT NULL`, eventID)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +343,7 @@ func (s *Store) CompareEventMenuModel(ctx context.Context, eventID int64) ([]mod
 	if err != nil || modelID == 0 {
 		return nil, err
 	}
-	currentRows, err := s.db.QueryContext(ctx, `SELECT item.id,item.normalized_name FROM menu_template_items item JOIN menu_template_sections section ON section.id=item.menu_template_section_id WHERE section.menu_template_id=? AND item.active=1 AND item.deleted_at IS NULL`, modelID)
+	currentRows, err := s.db.QueryContext(ctx, `SELECT item.id,item.normalized_name FROM menu_template_items item JOIN menu_template_sections section ON section.id=item.menu_template_section_id WHERE section.menu_template_id=? AND LOWER(section.display_name) NOT IN ('mesa de café','mesa do café') AND item.active=1 AND item.deleted_at IS NULL`, modelID)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +362,7 @@ func (s *Store) CompareEventMenuModel(ctx context.Context, eventID int64) ([]mod
 		return nil, err
 	}
 	currentRows.Close()
-	snapshotRows, err := s.db.QueryContext(ctx, `SELECT item.source_template_item_id,item.normalized_name FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND item.source_template_item_id IS NOT NULL`, eventID)
+	snapshotRows, err := s.db.QueryContext(ctx, `SELECT item.source_template_item_id,item.normalized_name FROM event_menu_snapshot_items item JOIN event_menu_sections section ON section.id=item.event_menu_section_id JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') AND item.source_template_item_id IS NOT NULL`, eventID)
 	if err != nil {
 		return nil, err
 	}

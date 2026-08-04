@@ -94,7 +94,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/manifest.webmanifest":          "emenysFlow",
 		"/static/offline.html":           "Eventos disponíveis neste aparelho",
 		"/static/js/offline.js":          "buffetflow-offline",
-		"/sw.js":                         `CACHE_VERSION = "v9"`,
+		"/sw.js":                         `CACHE_VERSION = "v10"`,
 		"/api/offline/bootstrap":         `"schema_version":1`,
 		"/static/css/app.css":            "--brand",
 	}

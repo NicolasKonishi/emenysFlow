@@ -1,10 +1,10 @@
-const CACHE_VERSION = "v9";
+const CACHE_VERSION = "v10";
 const SHELL_CACHE = `buffetflow-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `buffetflow-data-${CACHE_VERSION}`;
 const SHELL = [
   "/static/offline.html",
   "/static/css/app.css?v=8",
-  "/static/js/app.js?v=5",
+  "/static/js/app.js?v=6",
   "/static/js/offline.js?v=3",
   "/static/icons/icon.svg",
   "/manifest.webmanifest"

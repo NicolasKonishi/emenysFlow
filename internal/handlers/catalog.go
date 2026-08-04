@@ -14,10 +14,6 @@ import (
 func (a *App) catalog(w http.ResponseWriter, r *http.Request) {
 	data := a.baseData(r, "Cardápios e recipientes", "catalog")
 	var err error
-	data.MenuTemplates, err = a.store.ListMenuTemplates(r.Context(), true)
-	if err != nil {
-		data.Error = databaseErrorMessage(err)
-	}
 	data.MenuItems, err = a.store.ListMenuItems(r.Context(), true)
 	if err != nil {
 		data.Error = databaseErrorMessage(err)

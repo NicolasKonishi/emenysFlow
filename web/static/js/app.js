@@ -5,6 +5,24 @@ document.addEventListener("submit", (event) => {
 
 document.addEventListener("click",(event)=>{if(event.target.closest("[data-print]"))window.print();});
 
+function navKeyForPath(pathname) {
+  if (pathname === "/") return "dashboard";
+  const segments = pathname.split("/").filter(Boolean);
+  return segments[0] || "dashboard";
+}
+
+function updatePrimaryNavigation(pathname = window.location.pathname) {
+  const current = navKeyForPath(pathname);
+  document.querySelectorAll(".nav-list a, .mobile-nav a:not(.mobile-create)").forEach((link) => {
+    const target = navKeyForPath(new URL(link.href, window.location.origin).pathname);
+    if (target === current) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+}
+
 function initializeMenuTemplateSelectors(root = document) {
   root.querySelectorAll("[data-menu-template-select]").forEach((templateSelect) => {
     if (templateSelect.dataset.initialized === "true") return;
@@ -285,6 +303,7 @@ function initializeEventDecorationToggle(root = document) {
 
 document.addEventListener("DOMContentLoaded", () => {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  updatePrimaryNavigation();
   initializeMenuTemplateSelectors();
   initializeMenuModelFallback();
   initializePDFSharing();
@@ -293,8 +312,18 @@ document.addEventListener("DOMContentLoaded", () => {
 	initializeEventDecorationToggle();
 });
 
+document.addEventListener("htmx:beforeRequest", (event) => {
+  const link = event.detail.elt?.closest?.(".nav-list a, .mobile-nav a:not(.mobile-create)");
+  if (link) updatePrimaryNavigation(new URL(link.href, window.location.origin).pathname);
+});
+
+document.addEventListener("htmx:pushedIntoHistory", () => {
+  updatePrimaryNavigation();
+});
+
 document.addEventListener("htmx:afterSwap", (event) => {
   window.scrollTo({ top: 0, behavior: "instant" });
+  updatePrimaryNavigation();
   initializeMenuTemplateSelectors(event.target);
   initializeMenuModelFallback(event.target);
   initializePDFSharing(event.target);

@@ -136,6 +136,8 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 	modelItemIDs := formInt64Values(request, "model_item_ids")
 	serviceModelIDs := formInt64Values(request, "service_model_ids")
 	customItems := formLines(request.FormValue("model_custom_items"))
+	itemNames := parseMenuModelItemNames(request)
+	sectionCustomItems := parseMenuModelSectionCustomItems(request)
 	itemConfigurations := parseMenuModelConfigurations(request)
 	if err == nil && event.KitchenCookID.Valid {
 		if cookErr := a.store.ValidateKitchenCook(request.Context(), event.KitchenCookID.Int64); cookErr != nil {
@@ -240,7 +242,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 	if menuModelID > 0 {
 		currentModelID, _, _ := a.store.EventMenuModelSelection(request.Context(), event.ID)
 		if currentModelID != menuModelID {
-			err = a.store.ApplyMenuModelSnapshot(request.Context(), event.ID, menuModelID, modelItemIDs, customItems, user.ID)
+			err = a.store.ApplyMenuModelSnapshotWithCustomizations(request.Context(), event.ID, menuModelID, modelItemIDs, customItems, itemNames, sectionCustomItems, user.ID)
 		}
 		if err != nil {
 			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(err))), http.StatusSeeOther)
@@ -289,6 +291,34 @@ func formLines(value string) []string {
 	return result
 }
 
+func parseMenuModelItemNames(request *http.Request) map[int64]string {
+	result := map[int64]string{}
+	for key, values := range request.Form {
+		if !strings.HasPrefix(key, "model_item_name_") || len(values) == 0 {
+			continue
+		}
+		id, err := strconv.ParseInt(strings.TrimPrefix(key, "model_item_name_"), 10, 64)
+		if err == nil && id > 0 && strings.TrimSpace(values[0]) != "" {
+			result[id] = strings.TrimSpace(values[0])
+		}
+	}
+	return result
+}
+
+func parseMenuModelSectionCustomItems(request *http.Request) map[int64][]string {
+	result := map[int64][]string{}
+	for key, values := range request.Form {
+		if !strings.HasPrefix(key, "model_custom_items_section_") || len(values) == 0 {
+			continue
+		}
+		sectionID, err := strconv.ParseInt(strings.TrimPrefix(key, "model_custom_items_section_"), 10, 64)
+		if err == nil && sectionID > 0 {
+			result[sectionID] = formLines(values[0])
+		}
+	}
+	return result
+}
+
 func applySelectedMenuIDs(selection []models.EventMenuItem, ids []int64, guests int) []models.EventMenuItem {
 	selected := map[int64]bool{}
 	for _, id := range ids {
@@ -311,12 +341,12 @@ func markMenuModelSelections(sections []models.MenuModelSection, itemIDs []int64
 	for sectionIndex := range sections {
 		for itemIndex := range sections[sectionIndex].Items {
 			item := &sections[sectionIndex].Items[itemIndex]
-			item.Selected = item.Included || selected[item.ID]
+			item.Selected = (item.Included && itemIDs == nil) || selected[item.ID]
 		}
 		for groupIndex := range sections[sectionIndex].ChoiceGroups {
 			for itemIndex := range sections[sectionIndex].ChoiceGroups[groupIndex].Items {
 				item := &sections[sectionIndex].ChoiceGroups[groupIndex].Items[itemIndex]
-				item.Selected = item.Included || selected[item.ID]
+				item.Selected = (item.Included && itemIDs == nil) || selected[item.ID]
 			}
 		}
 	}
@@ -344,19 +374,32 @@ func overlayMenuModelConfigurations(sections []models.MenuModelSection, configur
 func parseMenuModelConfigurations(request *http.Request) map[int64]models.EventMenuItemConfiguration {
 	result := map[int64]models.EventMenuItemConfiguration{}
 	for key, values := range request.Form {
-		if len(values) == 0 || !strings.HasPrefix(key, "model_portions_") {
+		if len(values) == 0 {
 			continue
 		}
-		itemID, err := strconv.ParseInt(strings.TrimPrefix(key, "model_portions_"), 10, 64)
-		if err != nil || itemID <= 0 {
+		if strings.HasPrefix(key, "model_portions_") {
+			itemID, err := strconv.ParseInt(strings.TrimPrefix(key, "model_portions_"), 10, 64)
+			if err != nil || itemID <= 0 {
+				continue
+			}
+			configuration := result[itemID]
+			configuration.TemplateItemID = itemID
+			if portions, err := strconv.ParseFloat(values[0], 64); err == nil && portions > 0 {
+				configuration.Portions = sql.NullFloat64{Float64: portions, Valid: true}
+			}
+			result[itemID] = configuration
 			continue
 		}
-		configuration := models.EventMenuItemConfiguration{TemplateItemID: itemID}
-		if portions, err := strconv.ParseFloat(values[0], 64); err == nil && portions > 0 {
-			configuration.Portions = sql.NullFloat64{Float64: portions, Valid: true}
+		if strings.HasPrefix(key, "model_container_") {
+			itemID, err := strconv.ParseInt(strings.TrimPrefix(key, "model_container_"), 10, 64)
+			if err != nil || itemID <= 0 {
+				continue
+			}
+			configuration := result[itemID]
+			configuration.TemplateItemID = itemID
+			configuration.ContainerTypeID = parseOptionalInt(values[0])
+			result[itemID] = configuration
 		}
-		configuration.ContainerTypeID = parseOptionalInt(request.FormValue(fmt.Sprintf("model_container_%d", itemID)))
-		result[itemID] = configuration
 	}
 	return result
 }
@@ -372,9 +415,22 @@ func (a *App) populateEventModelData(request *http.Request, data *PageData, mode
 	}
 	if modelID > 0 {
 		data.ModelSections, _ = a.store.MenuModelSections(request.Context(), modelID)
+		data.ModelSections = withoutCoffeeTableSection(data.ModelSections)
 		markMenuModelSelections(data.ModelSections, itemIDs)
 		overlayMenuModelConfigurations(data.ModelSections, parseMenuModelConfigurations(request))
 	}
+}
+
+func withoutCoffeeTableSection(sections []models.MenuModelSection) []models.MenuModelSection {
+	filtered := make([]models.MenuModelSection, 0, len(sections))
+	for _, section := range sections {
+		name := strings.ToLower(strings.TrimSpace(section.Name))
+		if name == "mesa de café" || name == "mesa do café" {
+			continue
+		}
+		filtered = append(filtered, section)
+	}
+	return filtered
 }
 
 func (a *App) menuModelPreview(writer http.ResponseWriter, request *http.Request) {
@@ -383,6 +439,7 @@ func (a *App) menuModelPreview(writer http.ResponseWriter, request *http.Request
 	data.CurrentMenuModelID = modelID
 	if modelID > 0 {
 		data.ModelSections, _ = a.store.MenuModelSections(request.Context(), modelID)
+		data.ModelSections = withoutCoffeeTableSection(data.ModelSections)
 		markMenuModelSelections(data.ModelSections, nil)
 	}
 	data.Containers, _ = a.store.ListContainerTypes(request.Context(), false)

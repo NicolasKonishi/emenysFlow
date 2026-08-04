@@ -56,6 +56,7 @@ func (a *App) eventForm(writer http.ResponseWriter, request *http.Request) {
 	}
 	if data.Event.ID > 0 {
 		data.DecorationProfile, _ = a.store.GetDecorationProfile(request.Context(), data.Event.ID)
+		data.RentedDecorations, _ = a.store.EventRentedDecorationItems(request.Context(), data.Event.ID)
 	}
 	data.Decorations, _ = a.store.EventDecorationSelectionForWindow(request.Context(), data.Event.ID, data.Event.StartsAt, data.Event.EndsAt)
 	a.populateEventModelData(request, &data, modelID, selectedItemIDs, serviceIDs)
@@ -130,6 +131,10 @@ func (a *App) eventUpdate(writer http.ResponseWriter, request *http.Request) {
 
 func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id int64) {
 	event, err := a.parseEventForm(request, id)
+	rentedDecorations, rentalErr := parseRentedDecorationForm(request)
+	if err == nil {
+		err = rentalErr
+	}
 	menuModelID := int64(0)
 	if raw := request.FormValue("menu_model_id"); raw != "" {
 		menuModelID, _ = strconv.ParseInt(raw, 10, 64)
@@ -190,6 +195,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		data.MenuCustomized = id > 0 || request.FormValue("menu_customized") == "1"
 		data.ModelCustomItems = request.FormValue("model_custom_items")
 		data.Decorations = decorationSelection
+		data.RentedDecorations = rentedDecorations
 		a.populateEventModelData(request, &data, menuModelID, modelItemIDs, serviceModelIDs)
 		a.render(writer, request, "event_form", data)
 		return
@@ -210,6 +216,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		data.MenuCustomized = id > 0 || request.FormValue("menu_customized") == "1"
 		data.ModelCustomItems = request.FormValue("model_custom_items")
 		data.Decorations = decorationSelection
+		data.RentedDecorations = rentedDecorations
 		a.populateEventModelData(request, &data, menuModelID, modelItemIDs, serviceModelIDs)
 		a.render(writer, request, "event_form", data)
 		return
@@ -236,6 +243,10 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(decorationErr))), http.StatusSeeOther)
 			return
 		}
+		if rentalErr := a.store.SaveEventRentedDecorationItems(request.Context(), event.ID, rentedDecorations); rentalErr != nil {
+			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(rentalErr))), http.StatusSeeOther)
+			return
+		}
 	}
 	for index := range selection {
 		selection[index].EventID = event.ID
@@ -252,6 +263,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		data.MenuCustomized = true
 		data.ModelCustomItems = request.FormValue("model_custom_items")
 		data.Decorations = decorationSelection
+		data.RentedDecorations = rentedDecorations
 		a.populateEventModelData(request, &data, menuModelID, modelItemIDs, serviceModelIDs)
 		a.render(writer, request, "event_form", data)
 		return
@@ -287,6 +299,44 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 	a.redirect(writer, request, target, http.StatusSeeOther)
 }
 
+func parseRentedDecorationForm(request *http.Request) ([]models.DecorationCompositionItem, error) {
+	names := request.Form["rented_decoration_name"]
+	colors := request.Form["rented_decoration_color"]
+	quantities := request.Form["rented_decoration_quantity"]
+	ids := request.Form["rented_decoration_id"]
+	if len(names) > 50 {
+		return nil, fmt.Errorf("Adicione no máximo 50 itens alugados por evento.")
+	}
+	result := make([]models.DecorationCompositionItem, 0, len(names))
+	for index, rawName := range names {
+		name := strings.TrimSpace(rawName)
+		color := ""
+		if index < len(colors) {
+			color = strings.TrimSpace(colors[index])
+		}
+		rawQuantity := ""
+		if index < len(quantities) {
+			rawQuantity = strings.TrimSpace(quantities[index])
+		}
+		if name == "" && color == "" && rawQuantity == "" {
+			continue
+		}
+		if name == "" {
+			return result, fmt.Errorf("Informe o nome de cada item que será alugado.")
+		}
+		quantity := parseFloat(rawQuantity)
+		if quantity <= 0 {
+			return result, fmt.Errorf("Informe uma quantidade válida para o item alugado %s.", name)
+		}
+		item := models.DecorationCompositionItem{Name: name, Color: color, Quantity: quantity, Origin: "rented", RentalStatus: "awaiting_confirmation", SortOrder: len(result)}
+		if index < len(ids) {
+			item.ID, _ = strconv.ParseInt(ids[index], 10, 64)
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
 func formInt64Values(request *http.Request, name string) []int64 {
 	var result []int64
 	for _, raw := range request.Form[name] {
@@ -311,11 +361,12 @@ func applyEventDecorationForm(request *http.Request, items []models.EventDecorat
 		if !item.AvailabilityTracked || !item.Selectable {
 			return items, fmt.Errorf("%s não está disponível no estoque para a data do evento.", item.Name)
 		}
-		quantity := parseFloat(request.FormValue(fmt.Sprintf("decoration_quantity_%d", item.DecorationID)))
-		if quantity <= 0 {
-			quantity = item.Quantity
+		rawQuantity := strings.TrimSpace(request.FormValue(fmt.Sprintf("decoration_quantity_%d", item.DecorationID)))
+		quantity := parseFloat(rawQuantity)
+		if rawQuantity == "" || quantity <= 0 {
+			return items, fmt.Errorf("Informe uma quantidade válida para %s.", item.Name)
 		}
-		if quantity <= 0 || quantity > item.AvailableQuantity+0.0001 {
+		if quantity > item.AvailableQuantity+0.0001 {
 			return items, fmt.Errorf("%s possui somente %s disponível para a data do evento.", item.Name, strconv.FormatFloat(item.AvailableQuantity, 'f', -1, 64))
 		}
 		item.Quantity = quantity

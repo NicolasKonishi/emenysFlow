@@ -13,13 +13,43 @@
       <p>Habilite somente as peças que deverão ser separadas. A quantidade considera o estoque livre na data deste evento.</p>
       <p class="form-help"><a href="/decorations">Administrar itens, cores e modelos de decoração →</a></p>
       <div class="decoration-stock-grid">
-        {{range .Decorations}}<label class="decoration-stock-choice {{if not .Selectable}}unavailable{{end}}">
-          <input type="checkbox" name="decoration_ids" value="{{.DecorationID}}" {{if .Selected}}checked{{end}} {{if not .Selectable}}disabled{{end}}>
-          <input type="hidden" name="decoration_quantity_{{.DecorationID}}" value="{{inputNumber .Quantity}}">
-          <span class="decoration-stock-toggle" aria-hidden="true"></span>
-          <span class="decoration-stock-copy"><strong>{{.Name}}</strong><span class="decoration-tags">{{if .Color}}<em>Cor: {{.Color}}</em>{{end}}{{if .UsageLocation}}<em>{{.UsageLocation}}</em>{{end}}{{if .Model}}<em>{{.Model}}</em>{{end}}</span><small>{{if .Selectable}}Levar {{number .Quantity}} {{.Unit}} · {{number .AvailableQuantity}} disponível{{if ne .ReservedQuantity 0.0}} · {{number .ReservedQuantity}} reservado{{end}}{{else}}Indisponível para esta data{{end}}</small></span>
-        </label>{{else}}<div class="empty-state">Nenhum item foi cadastrado no catálogo de decoração.</div>{{end}}
+        {{range .Decorations}}<div class="decoration-stock-choice {{if not .Selectable}}unavailable{{end}}">
+          <label class="decoration-stock-select">
+            <input type="checkbox" name="decoration_ids" value="{{.DecorationID}}" {{if .Selected}}checked{{end}} {{if not .Selectable}}disabled{{end}}>
+            <span class="decoration-stock-toggle" aria-hidden="true"></span>
+            <span class="decoration-stock-copy"><strong>{{.Name}}</strong><span class="decoration-tags">{{if .Color}}<em>Cor: {{.Color}}</em>{{end}}{{if .UsageLocation}}<em>{{.UsageLocation}}</em>{{end}}{{if .Model}}<em>{{.Model}}</em>{{end}}</span><small>{{if .Selectable}}{{number .AvailableQuantity}} {{.Unit}} disponível{{if ne .ReservedQuantity 0.0}} · {{number .ReservedQuantity}} reservado{{end}}{{else}}Indisponível para esta data{{end}}</small></span>
+          </label>
+          {{if .Selectable}}<label class="decoration-stock-quantity"><span>Quantidade</span><input type="number" min="1" max="{{inputNumber .AvailableQuantity}}" step="1" name="decoration_quantity_{{.DecorationID}}" value="{{inputNumber .Quantity}}" aria-label="Quantidade de {{.Name}}"><small>Máx. {{number .AvailableQuantity}}</small></label>{{end}}
+        </div>{{else}}<div class="empty-state">Nenhum item foi cadastrado no catálogo de decoração.</div>{{end}}
       </div>
+      <details class="decoration-event-details rented-decoration-details" data-rented-decoration-editor open>
+        <summary>Itens que serão alugados</summary>
+        <p>Adicione peças que não fazem parte do acervo próprio. A cor é opcional.</p>
+        <div class="rented-decoration-list" data-rented-decoration-list>
+          {{range .RentedDecorations}}<div class="rented-decoration-row">
+            <input type="hidden" name="rented_decoration_id" value="{{.ID}}">
+            <label>Item para alugar<input name="rented_decoration_name" value="{{.Name}}" placeholder="Ex.: Cadeira Tiffany"></label>
+            <label>Cor (opcional)<input name="rented_decoration_color" value="{{.Color}}" placeholder="Ex.: Dourada"></label>
+            <label>Quantidade<input type="number" min="1" step="1" name="rented_decoration_quantity" value="{{inputNumber .Quantity}}"></label>
+            <button class="button ghost small danger-text" type="button" data-remove-rented-decoration>Remover</button>
+          </div>{{else}}<div class="rented-decoration-row">
+            <input type="hidden" name="rented_decoration_id" value="">
+            <label>Item para alugar<input name="rented_decoration_name" placeholder="Ex.: Cadeira Tiffany"></label>
+            <label>Cor (opcional)<input name="rented_decoration_color" placeholder="Ex.: Dourada"></label>
+            <label>Quantidade<input type="number" min="1" step="1" name="rented_decoration_quantity" placeholder="1"></label>
+            <button class="button ghost small danger-text" type="button" data-remove-rented-decoration>Remover</button>
+          </div>{{end}}
+        </div>
+        <button class="button secondary small" type="button" data-add-rented-decoration>＋ Adicionar outro item alugado</button>
+        <small class="form-help">Os itens serão incluídos na checklist como aluguel pendente de confirmação.</small>
+        <template data-rented-decoration-template><div class="rented-decoration-row">
+          <input type="hidden" name="rented_decoration_id" value="">
+          <label>Item para alugar<input name="rented_decoration_name" placeholder="Ex.: Cadeira Tiffany"></label>
+          <label>Cor (opcional)<input name="rented_decoration_color" placeholder="Ex.: Dourada"></label>
+          <label>Quantidade<input type="number" min="1" step="1" name="rented_decoration_quantity" placeholder="1"></label>
+          <button class="button ghost small danger-text" type="button" data-remove-rented-decoration>Remover</button>
+        </div></template>
+      </details>
       <details class="decoration-event-details"><summary>Detalhes, tema e observações</summary><div class="form-grid two"><label>Estilo geral<select name="decoration_style"><option value="">Selecione</option><option value="Rústica" {{if eq .DecorationProfile.Style "Rústica"}}selected{{end}}>Rústica</option><option value="Clássica" {{if eq .DecorationProfile.Style "Clássica"}}selected{{end}}>Clássica</option><option value="Dourada" {{if eq .DecorationProfile.Style "Dourada"}}selected{{end}}>Dourada</option><option value="Romântica" {{if eq .DecorationProfile.Style "Romântica"}}selected{{end}}>Romântica</option><option value="Minimalista" {{if eq .DecorationProfile.Style "Minimalista"}}selected{{end}}>Minimalista</option><option value="Tropical" {{if eq .DecorationProfile.Style "Tropical"}}selected{{end}}>Tropical</option><option value="Personalizada" {{if eq .DecorationProfile.Style "Personalizada"}}selected{{end}}>Personalizada</option></select></label><label>Tema<input name="decoration_theme" value="{{.DecorationProfile.Theme}}"></label><label>Cores principais<input name="decoration_primary_colors" value="{{.DecorationProfile.PrimaryColors}}"></label><label>Responsável<input name="decoration_responsible" value="{{.DecorationProfile.ResponsibleName}}"></label><label class="span-2">Descrição<textarea name="decoration_description" rows="3">{{.DecorationProfile.Description}}</textarea></label><label class="span-2">Observações<textarea name="decoration_notes" rows="3">{{.DecorationProfile.Notes}}</textarea></label></div></details>
       {{if .IsEdit}}<a class="button secondary" href="/events/{{.Event.ID}}/decorations">Configurar composições, itens e fotos →</a>{{end}}
     </section>

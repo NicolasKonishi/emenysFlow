@@ -99,6 +99,28 @@ func TestFullOperationAndReturnUpdatesStock(t *testing.T) {
 	}
 }
 
+func TestRentedDecorationEntersChecklistWithColorAndQuantity(t *testing.T) {
+	store, closeStore := testStore(t)
+	defer closeStore()
+	ctx := context.Background()
+	items := []models.DecorationCompositionItem{{Name: "Cadeira Tiffany", Color: "Dourada", Quantity: 80, Origin: "rented"}}
+	if err := store.SaveEventRentedDecorationItems(ctx, 1, items); err != nil {
+		t.Fatal(err)
+	}
+	service := NewChecklistService(store)
+	if _, err := service.Generate(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	var name, notes string
+	var quantity float64
+	if err := store.DB().QueryRowContext(ctx, `SELECT name,required_quantity,notes FROM checklist_items WHERE checklist_id=(SELECT id FROM checklists WHERE event_id=1) AND source_key LIKE 'decoration-rental:%' AND active=1`).Scan(&name, &quantity, &notes); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Cadeira Tiffany" || quantity != 80 || !strings.Contains(notes, "Cor: Dourada") {
+		t.Fatalf("aluguel inesperado na checklist: name=%q quantity=%.0f notes=%q", name, quantity, notes)
+	}
+}
+
 func TestChecklistRegenerationIsIdempotentAndPreservesOverride(t *testing.T) {
 	store, closeStore := testStore(t)
 	defer closeStore()

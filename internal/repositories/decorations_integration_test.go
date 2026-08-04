@@ -42,11 +42,12 @@ func TestDecorationSelectionUsesColorAndEventAvailability(t *testing.T) {
 	if vase.DecorationID == 0 {
 		t.Fatal("Vaso dourado não apareceu no catálogo de decoração")
 	}
-	if vase.Color != "Dourado" || vase.AvailableQuantity != 6 || vase.Quantity != 6 || !vase.Selectable {
+	if vase.Color != "Dourado" || vase.AvailableQuantity != 6 || vase.Quantity != 1 || !vase.Selectable {
 		t.Fatalf("decoração com disponibilidade incorreta: %+v", vase)
 	}
 
 	vase.Selected = true
+	vase.Quantity = 3
 	if err = store.SaveEventDecorations(ctx, event.ID, []models.EventDecoration{vase}); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +55,7 @@ func TestDecorationSelectionUsesColorAndEventAvailability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(requirements) != 1 || requirements[0].InventoryItemID != 17 || requirements[0].Quantity != 6 {
+	if len(requirements) != 1 || requirements[0].InventoryItemID != 17 || requirements[0].Quantity != 3 {
 		t.Fatalf("requisito da decoração incorreto: %+v", requirements)
 	}
 }
@@ -126,5 +127,42 @@ func TestDecorationCatalogCanCreateUpdateAndToggleItem(t *testing.T) {
 	}
 	if !foundInactive {
 		t.Fatal("item inativo não apareceu no catálogo completo")
+	}
+}
+
+func TestEventRentedDecorationsCanBeSavedEditedAndRemoved(t *testing.T) {
+	store, _, ctx := newModelWorkflowStore(t)
+	items := []models.DecorationCompositionItem{{Name: "Cadeira Tiffany", Color: "Dourada", Quantity: 80, Origin: "rented"}}
+	if err := store.SaveEventRentedDecorationItems(ctx, 1, items); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := store.EventRentedDecorationItems(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || stored[0].Name != "Cadeira Tiffany" || stored[0].Color != "Dourada" || stored[0].Quantity != 80 {
+		t.Fatalf("item alugado não foi salvo: %+v", stored)
+	}
+
+	stored[0].Color = "Rosé"
+	stored[0].Quantity = 60
+	stored = append(stored, models.DecorationCompositionItem{Name: "Arranjo alto", Quantity: 6, Origin: "rented"})
+	if err = store.SaveEventRentedDecorationItems(ctx, 1, stored); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = store.EventRentedDecorationItems(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 2 || stored[0].Color != "Rosé" || stored[0].Quantity != 60 {
+		t.Fatalf("itens alugados não foram atualizados: %+v", stored)
+	}
+
+	if err = store.SaveEventRentedDecorationItems(ctx, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = store.EventRentedDecorationItems(ctx, 1)
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("itens alugados não foram removidos: %+v, err=%v", stored, err)
 	}
 }

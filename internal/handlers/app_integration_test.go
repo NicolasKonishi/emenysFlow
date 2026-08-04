@@ -66,7 +66,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/models?tab=services": "Totem fotográfico",
 		"/models/menus/7":      "Adicionar à seção",
 		"/models/services/7":   "Adicionar componente",
-		"/events/new":          `name="kitchen_cook_id"`,
+		"/events/new":          `type="number" min="1" max="10" step="1" name="decoration_quantity_2"`,
 		"/events/menu-model-preview?menu_model_id=7": "Escolha de entradas",
 		"/events/1":                      "Íris do Campo",
 		"/events/1/pdf":                  "Compartilhar / WhatsApp",
@@ -94,7 +94,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/manifest.webmanifest":          "emenysFlow",
 		"/static/offline.html":           "Eventos disponíveis neste aparelho",
 		"/static/js/offline.js":          "buffetflow-offline",
-		"/sw.js":                         `CACHE_VERSION = "v9"`,
+		"/sw.js":                         `CACHE_VERSION = "v17"`,
 		"/api/offline/bootstrap":         `"schema_version":1`,
 		"/static/css/app.css":            "--brand",
 	}
@@ -110,6 +110,21 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		}
 		if !strings.Contains(string(body), expected) {
 			t.Errorf("GET %s missing %q in response", path, expected)
+		}
+		if strings.Contains(string(body), "onsubmit=") {
+			t.Errorf("GET %s rendered an inline script handler", path)
+		}
+		if path == "/" {
+			policy := response.Header.Get("Content-Security-Policy")
+			if !strings.Contains(policy, "script-src 'self'") || strings.Contains(policy, "unpkg.com") {
+				t.Errorf("unexpected Content-Security-Policy: %q", policy)
+			}
+			if strings.Contains(string(body), "data-update-notice") || strings.Contains(string(body), "Uma nova versão do emenysFlow") {
+				t.Error("dashboard still rendered the obsolete application update notice")
+			}
+		}
+		if path == "/events/new" && (!strings.Contains(string(body), "Itens que serão alugados") || !strings.Contains(string(body), `name="rented_decoration_color"`)) {
+			t.Error("new event form is missing the rented decoration editor")
 		}
 	}
 

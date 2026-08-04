@@ -36,7 +36,7 @@ func (s *Store) EventDecorationSelectionForWindow(ctx context.Context, eventID i
 		catalog.inventory_item_id,catalog.unit,catalog.stock_quantity,catalog.damaged_quantity,catalog.reserved_quantity,
 		MAX(0,catalog.stock_quantity-catalog.damaged_quantity-catalog.reserved_quantity) available_quantity,catalog.availability_tracked,
 		CASE WHEN event_selection.id IS NOT NULL OR (catalog.availability_tracked=1 AND catalog.stock_quantity-catalog.damaged_quantity-catalog.reserved_quantity>0) THEN 1 ELSE 0 END selectable,
-		COALESCE(event_selection.quantity,MAX(0,catalog.stock_quantity-catalog.damaged_quantity-catalog.reserved_quantity)),
+		COALESCE(event_selection.quantity,CASE WHEN catalog.stock_quantity-catalog.damaged_quantity-catalog.reserved_quantity>0 THEN 1 ELSE 0 END),
 		CASE WHEN event_selection.id IS NULL THEN 0 ELSE 1 END selected
 	FROM catalog LEFT JOIN event_decorations event_selection ON event_selection.decoration_id=catalog.id AND event_selection.event_id=?
 	ORDER BY catalog.usage_location,catalog.color,catalog.name`, eventID, ends, starts, eventID)

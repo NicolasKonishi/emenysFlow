@@ -9,12 +9,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icons/icon.svg">
-  <link rel="stylesheet" href="/static/css/app.css?v=8">
-  <script defer src="https://unpkg.com/htmx.org@2.0.7/dist/htmx.min.js"></script>
-  <script defer src="/static/js/app.js?v=5"></script>
-  <script defer src="/static/js/offline.js?v=3"></script>
+  <link rel="stylesheet" href="/static/css/app.css?v=14">
+  <script defer src="/static/js/app.js?v=9"></script>
+  <script defer src="/static/js/offline.js?v=7"></script>
 </head>
-<body {{if .User.ID}}class="app-shell" hx-boost="true" hx-target="#app-main" hx-push-url="true"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
+<body {{if .User.ID}}class="app-shell"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
   {{if .User.ID}}
   <aside class="sidebar" aria-label="Navegação principal">
     <a class="brand" href="/" aria-label="emenysFlow, página inicial">
@@ -43,13 +42,12 @@
   {{end}}
 
   {{if .User.ID}}
-  <section class="sync-status-bar" data-sync-status-bar aria-live="polite">
+  <section class="sync-status-bar" data-sync-status-bar aria-live="polite" hidden>
     <span class="connection-state" data-connection-state>Verificando conexão…</span>
     <span data-pending-count>0 operações pendentes</span>
     <span data-last-sync>Ainda não sincronizado</span>
     <button type="button" class="button ghost small" data-sync-now>Sincronizar agora</button>
   </section>
-  <section class="update-notice" data-update-notice hidden><span>Uma nova versão do emenysFlow está pronta.</span><button type="button" class="button primary small" data-apply-update>Atualizar aplicação</button></section>
   <aside class="sync-conflicts" data-conflict-panel hidden><header><strong>Conflitos de sincronização</strong><button type="button" data-close-conflicts aria-label="Fechar">×</button></header><div data-conflict-list></div></aside>
   {{end}}
 

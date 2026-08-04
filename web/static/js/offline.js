@@ -148,7 +148,7 @@
       const required = Number(quantity.max || quantity.value || 0);
       const actions = document.createElement("div");
       actions.className = "mobile-quick-actions";
-      actions.innerHTML = '<button type="button" class="button primary" data-quick-complete>✓ Concluído</button><button type="button" class="button danger" data-quick-missing>Falta quantidade</button><div class="mobile-missing-editor" hidden><label>Quanto falta?<input type="number" min="0.01" step="0.01" required></label><button type="button" class="button danger" data-quick-missing-save>Confirmar falta</button></div><small aria-live="polite"></small>';
+      actions.innerHTML = '<button type="button" class="button primary" data-quick-complete>✓ Concluído</button><button type="button" class="button danger" data-quick-missing>Falta quantidade</button><div class="mobile-missing-editor" hidden><label>Quanto falta?<input type="number" min="1" step="1" required></label><button type="button" class="button danger" data-quick-missing-save>Confirmar falta</button></div><small aria-live="polite"></small>';
       form.before(actions);
       const status = actions.querySelector("small");
       const editor = actions.querySelector(".mobile-missing-editor");
@@ -397,13 +397,6 @@
   navigator.serviceWorker?.addEventListener("message", (event) => {
     if (event.data?.type === "SYNC_REQUESTED") syncOperations();
   });
-  let reloadingForUpdate = false;
-  navigator.serviceWorker?.addEventListener("controllerchange", () => {
-    if (reloadingForUpdate) return;
-    reloadingForUpdate = true;
-    location.reload();
-  });
-
   document.addEventListener("DOMContentLoaded", async () => {
     if ("serviceWorker" in navigator) {
       registration = await navigator.serviceWorker.register("/sw.js").catch(() => null);

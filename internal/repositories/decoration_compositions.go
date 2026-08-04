@@ -115,7 +115,7 @@ func (s *Store) RemoveDecorationComposition(ctx context.Context, eventID, compos
 }
 
 func (s *Store) decorationCompositionItems(ctx context.Context, compositionID int64) ([]models.DecorationCompositionItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT item.id,item.composition_id,item.decoration_id,item.inventory_item_id,COALESCE(NULLIF(item.custom_name,''),decoration.name,inventory.name,''),item.quantity,item.origin,item.supplier_id,item.supplier_name,item.estimated_cost_cents,item.pickup_at,item.return_at,item.order_reference,COALESCE(item.rental_status,''),item.notes,item.sort_order,item.row_version FROM event_decoration_composition_items item LEFT JOIN decorations decoration ON decoration.id=item.decoration_id LEFT JOIN inventory_items inventory ON inventory.id=item.inventory_item_id WHERE item.composition_id=? ORDER BY item.sort_order,item.id`, compositionID)
+	rows, err := s.db.QueryContext(ctx, `SELECT item.id,item.composition_id,item.decoration_id,item.inventory_item_id,COALESCE(NULLIF(item.custom_name,''),decoration.name,inventory.name,''),item.color,item.quantity,item.origin,item.supplier_id,item.supplier_name,item.estimated_cost_cents,item.pickup_at,item.return_at,item.order_reference,COALESCE(item.rental_status,''),item.notes,item.sort_order,item.row_version FROM event_decoration_composition_items item LEFT JOIN decorations decoration ON decoration.id=item.decoration_id LEFT JOIN inventory_items inventory ON inventory.id=item.inventory_item_id WHERE item.composition_id=? ORDER BY item.sort_order,item.id`, compositionID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (s *Store) decorationCompositionItems(ctx context.Context, compositionID in
 	for rows.Next() {
 		var item models.DecorationCompositionItem
 		var pickup, returned sql.NullString
-		if err := rows.Scan(&item.ID, &item.CompositionID, &item.DecorationID, &item.InventoryItemID, &item.Name, &item.Quantity, &item.Origin, &item.SupplierID, &item.SupplierName, &item.EstimatedCostCents, &pickup, &returned, &item.OrderReference, &item.RentalStatus, &item.Notes, &item.SortOrder, &item.RowVersion); err != nil {
+		if err := rows.Scan(&item.ID, &item.CompositionID, &item.DecorationID, &item.InventoryItemID, &item.Name, &item.Color, &item.Quantity, &item.Origin, &item.SupplierID, &item.SupplierName, &item.EstimatedCostCents, &pickup, &returned, &item.OrderReference, &item.RentalStatus, &item.Notes, &item.SortOrder, &item.RowVersion); err != nil {
 			return nil, err
 		}
 		if pickup.Valid {
@@ -156,14 +156,14 @@ func (s *Store) SaveDecorationCompositionItem(ctx context.Context, eventID int64
 	returned := timeOrNil(item.ReturnAt)
 	now := nowString()
 	if item.ID == 0 {
-		result, err := s.db.ExecContext(ctx, `INSERT INTO event_decoration_composition_items(composition_id,decoration_id,inventory_item_id,custom_name,quantity,origin,supplier_id,supplier_name,estimated_cost_cents,pickup_at,return_at,order_reference,rental_status,notes,sort_order,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`, item.CompositionID, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, now)
+		result, err := s.db.ExecContext(ctx, `INSERT INTO event_decoration_composition_items(composition_id,decoration_id,inventory_item_id,custom_name,color,quantity,origin,supplier_id,supplier_name,estimated_cost_cents,pickup_at,return_at,order_reference,rental_status,notes,sort_order,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`, item.CompositionID, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Color, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, now)
 		if err != nil {
 			return err
 		}
 		item.ID, _ = result.LastInsertId()
 		return nil
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE event_decoration_composition_items SET decoration_id=?,inventory_item_id=?,custom_name=?,quantity=?,origin=?,supplier_id=?,supplier_name=?,estimated_cost_cents=?,pickup_at=?,return_at=?,order_reference=?,rental_status=?,notes=?,sort_order=?,row_version=row_version+1,updated_at=? WHERE id=? AND composition_id=?`, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, item.ID, item.CompositionID)
+	result, err := s.db.ExecContext(ctx, `UPDATE event_decoration_composition_items SET decoration_id=?,inventory_item_id=?,custom_name=?,color=CASE WHEN ?='' THEN color ELSE ? END,quantity=?,origin=?,supplier_id=?,supplier_name=?,estimated_cost_cents=?,pickup_at=?,return_at=?,order_reference=?,rental_status=?,notes=?,sort_order=?,row_version=row_version+1,updated_at=? WHERE id=? AND composition_id=?`, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Color, item.Color, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, item.ID, item.CompositionID)
 	if err != nil {
 		return err
 	}
@@ -251,20 +251,20 @@ func (s *Store) SyncDecorationRentalChecklist(ctx context.Context, eventID int64
 		if err := tx.QueryRowContext(ctx, `SELECT id FROM inventory_categories WHERE name='Itens alugados'`).Scan(&categoryID); err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT item.id,COALESCE(NULLIF(item.custom_name,''),decoration.name,inventory.name),item.quantity,COALESCE(item.rental_status,''),item.supplier_name,item.notes FROM event_decoration_composition_items item JOIN event_decoration_compositions composition ON composition.id=item.composition_id JOIN event_decoration_profiles profile ON profile.id=composition.profile_id LEFT JOIN decorations decoration ON decoration.id=item.decoration_id LEFT JOIN inventory_items inventory ON inventory.id=item.inventory_item_id WHERE profile.event_id=? AND profile.active=1 AND item.origin='rented'`, eventID)
+		rows, err := tx.QueryContext(ctx, `SELECT item.id,COALESCE(NULLIF(item.custom_name,''),decoration.name,inventory.name),item.color,item.quantity,COALESCE(item.rental_status,''),item.supplier_name,item.notes FROM event_decoration_composition_items item JOIN event_decoration_compositions composition ON composition.id=item.composition_id JOIN event_decoration_profiles profile ON profile.id=composition.profile_id LEFT JOIN decorations decoration ON decoration.id=item.decoration_id LEFT JOIN inventory_items inventory ON inventory.id=item.inventory_item_id WHERE profile.event_id=? AND profile.active=1 AND item.origin='rented'`, eventID)
 		if err != nil {
 			return err
 		}
 		type rental struct {
 			id                      int64
-			name                    string
+			name, color             string
 			quantity                float64
 			status, supplier, notes string
 		}
 		var rentals []rental
 		for rows.Next() {
 			var item rental
-			if err := rows.Scan(&item.id, &item.name, &item.quantity, &item.status, &item.supplier, &item.notes); err != nil {
+			if err := rows.Scan(&item.id, &item.name, &item.color, &item.quantity, &item.status, &item.supplier, &item.notes); err != nil {
 				rows.Close()
 				return err
 			}
@@ -284,7 +284,14 @@ func (s *Store) SyncDecorationRentalChecklist(ctx context.Context, eventID int64
 				available = item.quantity
 			}
 			missing := item.quantity - available
-			_, err := tx.ExecContext(ctx, `INSERT INTO checklist_items(checklist_id,category_id,source_key,name,unit,calculated_quantity,required_quantity,available_quantity,missing_quantity,calculation_origin,notes,status,item_kind,manual_item,active,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,? ,?,'pending','rented',0,1,1,?,?) ON CONFLICT(checklist_id,source_key) DO UPDATE SET name=excluded.name,calculated_quantity=excluded.calculated_quantity,required_quantity=excluded.required_quantity,available_quantity=excluded.available_quantity,missing_quantity=excluded.missing_quantity,notes=excluded.notes,active=1,row_version=checklist_items.row_version+1,updated_at=excluded.updated_at`, checklistID, categoryID, key, item.name, "unidade", item.quantity, item.quantity, available, missing, "Decoração alugada para o evento", item.notes, now, now)
+			details := item.notes
+			if item.color != "" {
+				details = "Cor: " + item.color
+				if item.notes != "" {
+					details += " · " + item.notes
+				}
+			}
+			_, err := tx.ExecContext(ctx, `INSERT INTO checklist_items(checklist_id,category_id,source_key,name,unit,calculated_quantity,required_quantity,available_quantity,missing_quantity,calculation_origin,notes,status,item_kind,manual_item,active,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,? ,?,'pending','rented',0,1,1,?,?) ON CONFLICT(checklist_id,source_key) DO UPDATE SET name=excluded.name,calculated_quantity=excluded.calculated_quantity,required_quantity=excluded.required_quantity,available_quantity=excluded.available_quantity,missing_quantity=excluded.missing_quantity,notes=excluded.notes,active=1,row_version=checklist_items.row_version+1,updated_at=excluded.updated_at`, checklistID, categoryID, key, item.name, "unidade", item.quantity, item.quantity, available, missing, "Decoração alugada para o evento", details, now, now)
 			if err != nil {
 				return err
 			}

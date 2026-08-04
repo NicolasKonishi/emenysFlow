@@ -74,7 +74,7 @@ func (a *App) saveDecorationCompositionItem(w http.ResponseWriter, r *http.Reque
 		compositionID, _ = strconv.ParseInt(r.FormValue("composition_id"), 10, 64)
 	}
 	order, _ := strconv.Atoi(r.FormValue("sort_order"))
-	item := models.DecorationCompositionItem{ID: itemID, CompositionID: compositionID, DecorationID: parseOptionalInt(r.FormValue("decoration_id")), InventoryItemID: parseOptionalInt(r.FormValue("inventory_item_id")), Name: strings.TrimSpace(r.FormValue("name")), Quantity: parseFloat(r.FormValue("quantity")), Origin: r.FormValue("origin"), SupplierName: strings.TrimSpace(r.FormValue("supplier_name")), OrderReference: strings.TrimSpace(r.FormValue("order_reference")), RentalStatus: r.FormValue("rental_status"), Notes: strings.TrimSpace(r.FormValue("notes")), SortOrder: order}
+	item := models.DecorationCompositionItem{ID: itemID, CompositionID: compositionID, DecorationID: parseOptionalInt(r.FormValue("decoration_id")), InventoryItemID: parseOptionalInt(r.FormValue("inventory_item_id")), Name: strings.TrimSpace(r.FormValue("name")), Color: strings.TrimSpace(r.FormValue("color")), Quantity: parseFloat(r.FormValue("quantity")), Origin: r.FormValue("origin"), SupplierName: strings.TrimSpace(r.FormValue("supplier_name")), OrderReference: strings.TrimSpace(r.FormValue("order_reference")), RentalStatus: r.FormValue("rental_status"), Notes: strings.TrimSpace(r.FormValue("notes")), SortOrder: order}
 	if value := r.FormValue("estimated_cost"); value != "" {
 		item.EstimatedCostCents = sql.NullInt64{Int64: int64(parseFloat(value)*100 + 0.5), Valid: true}
 	}

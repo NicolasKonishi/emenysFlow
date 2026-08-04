@@ -303,8 +303,38 @@ function initializeEventDecorationToggle(root = document) {
   });
 }
 
+function initializeRentedDecorations(root = document) {
+  root.querySelectorAll("[data-rented-decoration-editor]").forEach((editor) => {
+    if (editor.dataset.rentedDecorationInitialized === "true") return;
+    editor.dataset.rentedDecorationInitialized = "true";
+    const list = editor.querySelector("[data-rented-decoration-list]");
+    const template = editor.querySelector("[data-rented-decoration-template]");
+    const addButton = editor.querySelector("[data-add-rented-decoration]");
+    if (!list || !template || !addButton) return;
+
+    addButton.addEventListener("click", () => {
+      const row = template.content.firstElementChild?.cloneNode(true);
+      if (!row) return;
+      list.appendChild(row);
+      row.querySelector('input[name="rented_decoration_name"]')?.focus();
+    });
+
+    editor.addEventListener("click", (event) => {
+      const removeButton = event.target.closest("[data-remove-rented-decoration]");
+      if (!removeButton) return;
+      const row = removeButton.closest(".rented-decoration-row");
+      if (!row) return;
+      const rows = list.querySelectorAll(".rented-decoration-row");
+      if (rows.length > 1) {
+        row.remove();
+        return;
+      }
+      row.querySelectorAll("input").forEach((input) => { input.value = ""; });
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   updatePrimaryNavigation();
   initializeMenuTemplateSelectors();
   initializeMenuModelFallback();
@@ -312,6 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMobileLoading();
 	initializeMenuCategoryRules();
 	initializeEventDecorationToggle();
+	initializeRentedDecorations();
 });
 
 document.addEventListener("htmx:beforeRequest", (event) => {
@@ -332,4 +363,5 @@ document.addEventListener("htmx:afterSwap", (event) => {
   initializeMobileLoading(event.target);
 	initializeMenuCategoryRules(event.target);
 	initializeEventDecorationToggle(event.target);
+	initializeRentedDecorations(event.target);
 });

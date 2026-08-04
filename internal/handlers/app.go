@@ -85,6 +85,7 @@ type PageData struct {
 	Public                   bool
 	Users                    []models.User
 	Decorations              []models.EventDecoration
+	RentedDecorations        []models.DecorationCompositionItem
 	DecorationProfile        models.DecorationProfile
 	Shortages                []models.ChecklistShortage
 	StaffSummary             models.StaffSummary
@@ -305,7 +306,7 @@ func (a *App) securityHeaders(next http.Handler) http.Handler {
 		}
 		writer.Header().Set("Referrer-Policy", "same-origin")
 		writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'")
+		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
 		if request.Method == http.MethodPost && request.Header.Get("Origin") != "" {
 			origin := request.Header.Get("Origin")
 			if !strings.HasSuffix(origin, "://"+request.Host) {

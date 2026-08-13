@@ -1,58 +1,59 @@
 # emenysFlow
 
-Sistema web para planejar eventos de buffet, calcular necessidades, reservar estoque e acompanhar a checklist operacional. A interface está em português do Brasil; o código, as migrations e os nomes técnicos estão em inglês.
+Sistema web para **planejar, calcular e operar eventos de buffet** — do cadastro do evento até o retorno dos materiais e atualização do estoque.
 
-O projeto implementa o fluxo funcional completo, do cadastro e cálculo até o retorno e a atualização final do estoque.
+Projeto pessoal que demonstra backend em Go, domínio rico, PWA offline e um fluxo operacional completo para equipes de eventos. A interface está em português; código, migrations e nomes técnicos em inglês.
 
-## O que já funciona
+> **Repositório público:** o código e a arquitetura estão aqui. Cardápios completos, serviços terceirizados, estoque real e regras calibradas da operação ficam em seeds locais não versionados — veja [docs/PUBLICACAO.md](docs/PUBLICACAO.md).
 
-- autenticação simples com sessões persistidas e senha protegida por PBKDF2;
-- dashboard com próximos eventos e alertas operacionais;
-- cadastro, edição, duplicação e cancelamento de eventos;
-- cadastro, edição, busca, filtro e desativação lógica de itens de estoque;
-- cadastro, edição e ativação de regras de cálculo;
-- cardápio normalizado e administrável, com inclusão, edição, desativação, recipientes, capacidades, panelas, transporte e equipamentos;
-- cardápios-modelo reutilizáveis, escolhidos ao criar a festa para preencher automaticamente todas as seções e itens;
-- serviços-modelo selecionáveis no evento, com componentes, duração, configuração e materiais operacionais;
-- CRUD independente de seções, itens, grupos de escolha e componentes, com criação, edição, remoção lógica e duplicação;
-- biblioteca versionada em **Modelos**, com 14 cardápios e 9 serviços terceirizados carregados do banco;
-- seções e grupos de escolha configuráveis, blocos compartilhados e regras de mínimo/máximo;
-- snapshot versionado por evento: a festa preserva o cardápio, os serviços e seus materiais mesmo após o modelo original mudar;
-- comparação manual com a versão atual do cardápio e reaplicação opcional, preservando escolhas e personalizações da festa;
-- personalização por evento com CRUD independente de itens, seções, porções, recipientes de serviço/transporte/bolo e equipamentos, sem alterar o modelo original do buffet;
-- seleção opcional da cozinheira responsável (Cris, Suelem ou Geriane), incluindo automaticamente sua caixa pessoal na checklist;
-- caixa da cozinheira abrível com CRUD do conteúdo e da quantidade armazenada; utensílios e temperos guardados viajam dentro da caixa e deixam de aparecer soltos na checklist;
-- conteúdos das caixas ficam ocultos da listagem geral de estoque e são administrados exclusivamente na área das cozinheiras;
-- descartáveis de evento calculados automaticamente por convidados, incluindo a quantidade especial de palitos quando houver welcome drinks ou dadinho de tapioca;
-- fichas de receita por prato, com ingredientes fixos, proporcionais ou por grupos de pessoas alimentando automaticamente a checklist;
-- seleção múltipla de entradas, pratos principais, acompanhamentos e bebidas diretamente no formulário do evento;
-- seleção de decoração por evento, condicionada à opção de decoração;
-- geração e recálculo idempotente da checklist;
-- cálculos de garçons, jarras, bandejas, descartáveis, louças, bebidas e welcome drinks;
-- distribuição percentual apenas entre os sabores selecionados, com pesos configuráveis e garantia de fechamento do total;
-- margem de segurança configurável por regra ou evento;
-- alteração manual por evento, com motivo e preservação em novos cálculos;
-- disponibilidade considerando estoque, itens danificados e reservas conflitantes;
-- confirmação explícita para reservar um evento com faltas;
-- fluxo operacional simplificado em Separação, Carregamento e Faltando, com quantidades parciais, responsáveis, prazos e resolução por compra/aluguel/substituição;
-- registro de responsáveis, horários, veículo, observações e fotos por URL;
-- retorno com danos, perdas, lavagem, manutenção e atualização transacional do estoque;
-- entradas, saídas, ajustes, danos, perdas e histórico de movimentações;
-- visualizador de PDF integrado ao navegador, com download opcional e compartilhamento do arquivo pelo menu do aparelho/WhatsApp;
-- planilha CSV, impressão e link público somente leitura;
-- usuários administradores e funcionários, categorias e localizações;
-- fórmulas personalizadas seguras com `guests`, `waiters` e `safety_margin`;
-- PWA operacional offline com IndexedDB, fila idempotente, fotos pendentes, conflitos, sincronização automática/manual, indicadores e aviso de nova versão;
-- histórico auditável de cada recálculo, com versões e resumo das alterações;
-- migrations e dados de demonstração idempotentes;
-- testes unitários e de integração das principais regras.
+---
 
-## Requisitos
+## Destaques técnicos
 
-- Go 1.26 ou superior.
-- Não é necessário instalar SQLite separadamente; o driver utilizado é implementado em Go.
+| Área | O que foi feito |
+|------|-----------------|
+| **Backend** | Monólito modular em Go (`net/http`, `html/template`, SQLite) |
+| **Domínio** | Motor de cálculo com regras configuráveis, distribuição percentual, margens e overrides por evento |
+| **Cardápio** | Modelos versionados, snapshots por evento, grupos de escolha, receitas e personalização sem alterar o modelo original |
+| **Operação** | Checklist idempotente, reserva de estoque, separação, carregamento mobile, retorno transacional |
+| **Offline** | PWA com Service Worker, IndexedDB, fila idempotente, conflitos e sync automático |
+| **Layout** | Editor de planta do salão (mesas, áreas, equipamentos) por evento ou avulso |
+| **Qualidade** | Testes unitários e de integração nas regras críticas; migrations SQL versionadas |
 
-## Executar
+---
+
+## Fluxo operacional
+
+```text
+Planejamento → Cálculo → Reserva → Separação → Carregamento → Evento → Retorno → Estoque
+```
+
+O sistema cobre:
+
+- autenticação com sessões e senha PBKDF2;
+- dashboard com próximos eventos e alertas;
+- eventos com cardápio-modelo, serviços terceirizados e decoração;
+- estoque com reservas conflitantes, movimentações e caixas de cozinheiras;
+- regras de cálculo editáveis (garçons, descartáveis, bebidas, equipamentos);
+- checklist recalculável com ajustes manuais auditáveis;
+- PDF, CSV, impressão e link público somente leitura;
+- hub operacional offline para separação e carregamento no celular;
+- layouts de salão editáveis e sincronizáveis.
+
+Detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/OFFLINE.md](docs/OFFLINE.md).
+
+---
+
+## Stack
+
+- **Go 1.26** — servidor HTTP, regras de negócio, acesso a dados
+- **SQLite** (driver puro Go) — persistência local, WAL, foreign keys
+- **HTMX** — navegação e formulários sem SPA
+- **PWA** — service worker, manifest, operação offline
+
+---
+
+## Executar (demonstração pública)
 
 ```powershell
 go mod download
@@ -61,28 +62,24 @@ go run ./cmd/server
 
 Abra [http://localhost:8080](http://localhost:8080).
 
-Credenciais de demonstração:
+| Campo | Valor |
+|-------|-------|
+| E-mail | `admin@buffet.local` |
+| Senha | `admin123` |
 
-- e-mail: `admin@buffet.local`
-- senha: `admin123`
+O seed público traz um evento genérico, dois cardápios-modelo e dois serviços de exemplo — suficiente para explorar telas e fluxos, sem expor dados da operação real.
 
-O banco é criado em `data/buffetflow.db`. Para usar outro arquivo ou porta:
-
-```powershell
-go run ./cmd/server -database C:\dados\buffet.db -address :9090
-```
-
-## Migrations
-
-As migrations SQL são carregadas da pasta do projeto e executadas automaticamente em ordem. Cada arquivo aplicado é registrado em `schema_migrations`.
-
-Aplicar migrations e sair:
+Banco local: `data/buffetflow.db` (ignorado pelo Git).
 
 ```powershell
-go run ./cmd/server -migrate-only
+go run ./cmd/server -database C:\caminho\outro.db -address :9090
 ```
 
-Para criar uma migration, adicione um arquivo numerado em `internal/database/migrations`, por exemplo `003_event_returns.sql`. Migrations aplicadas nunca devem ser editadas; crie uma nova migration para alterar o esquema.
+### Ambiente completo (local)
+
+Para carregar cardápios, serviços e estoque reais, coloque os arquivos SQL em `internal/database/seeds/private/` (veja o README dessa pasta). O servidor aplica esses seeds automaticamente após as migrations.
+
+---
 
 ## Testes
 
@@ -90,72 +87,42 @@ Para criar uma migration, adicione um arquivo numerado em `internal/database/mig
 go test ./...
 ```
 
-Com relatório de cobertura:
+Com seeds privados completos (validação do catálogo real):
 
 ```powershell
-go test -coverprofile coverage.out ./...
-go tool cover -func coverage.out
+go test -tags private_seeds ./internal/database/...
 ```
 
-## Dados iniciais
+---
 
-O seed inclui:
-
-- evento `BUFFET — Íris do Campo — 200 pessoas` para daqui a aproximadamente 14 dias;
-- cardápio com entradas, pratos principais e acompanhamentos;
-- 14 cardápios-modelo e 9 serviços terceirizados, prontos para seleção e personalização por evento;
-- bebidas distribuídas entre Coca-Cola, Guaraná, suco de laranja e suco de uva;
-- três itens de decoração;
-- localizações e itens iniciais de estoque, incluindo cubas, panelas e utensílios;
-- 14 regras de cálculo editáveis;
-- modelos iniciais de evento e tipos de recipiente.
-
-Para reiniciar somente o ambiente local de demonstração, pare a aplicação, remova manualmente `data/buffetflow.db` e execute o servidor novamente. Essa operação apaga todos os dados locais.
-
-## Arquitetura
-
-O projeto é um monólito modular. Essa escolha reduz a complexidade operacional e mantém limites claros para uma futura extração de módulos, se o volume exigir.
+## Estrutura
 
 ```text
-cmd/server/                    inicialização e servidor HTTP
-internal/database/             conexão, runner e migrations SQL
-internal/handlers/             rotas, validação HTTP e view models
-internal/models/               entidades do domínio
-internal/repositories/         consultas parametrizadas e transações
-internal/services/             autenticação e regras de negócio
-internal/templates/            templates HTML renderizados pelo backend
-web/static/                    CSS, JavaScript, manifest e service worker
-docs/                          decisões de arquitetura e modelo de dados
-data/                          banco SQLite local (ignorado pelo Git)
+cmd/server/                 entrada e servidor HTTP
+internal/handlers/          rotas, validação e view models
+internal/services/          autenticação e motor de checklist/cálculo
+internal/repositories/      SQL parametrizado e transações
+internal/models/            entidades de domínio
+internal/database/          conexão, migrations e seeds
+internal/templates/         HTML renderizado no servidor
+web/static/                 CSS, JS, PWA e layout editor
+docs/                       arquitetura, offline e publicação
 ```
 
-O fluxo principal é:
+---
 
-```text
-HTTP → handler → service → repository → SQLite
-                 ↓
-            cálculo puro
-```
+## Sobre este repositório
 
-Detalhes de arquitetura, telas, regras e decisões estão em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). O inventário inicial de tabelas está em [docs/DATABASE.md](docs/DATABASE.md).
+Este projeto foi desenvolvido para uma operação real de buffet. O código mostra **como** o sistema foi construído — camadas, regras, testes e decisões — enquanto os **dados operacionais** (cardápios completos, preços, nomes da equipe, acervo de decoração) permanecem fora do Git.
 
-## Decisões de implementação
+Se você é recrutador ou colega de desenvolvimento: clone, rode os testes, navegue pelo fluxo de evento e leia a arquitetura. Isso reflete o escopo real do trabalho.
 
-- `net/http` e `html/template` evitam um framework web desnecessário.
-- HTMX melhora navegação e formulários sem transformar o frontend em uma SPA.
-- Datas são persistidas em UTC e exibidas em `America/Sao_Paulo` por padrão.
-- Quantidades usam `REAL` para aceitar unidades fracionárias; valores monetários usam centavos inteiros.
-- Exclusão lógica é a operação normal para itens já utilizados.
-- Regras guardam parâmetros e condições no banco; o algoritmo interpreta os tipos de cálculo.
-- O cardápio possui tabelas normalizadas e mantém os campos textuais do briefing como apoio operacional.
-- Modelos são versionados; ao aplicá-los, o evento recebe snapshots próprios para evitar alterações retroativas.
-- O PWA usa Cache First no app shell e Network First nos dados. Eventos previamente sincronizados permanecem consultáveis; ações operacionais offline entram numa fila idempotente com controle otimista de versão.
-- A cópia offline não armazena senha. Ela expira em 12 horas sem uma nova validação online e é removida junto com os caches no logout.
+---
 
-## Preparação para produção
+## Licença
 
-O núcleo funcional está concluído. Para operação pública, configure HTTPS, backup automatizado do arquivo SQLite, credenciais próprias, armazenamento externo de fotos e monitoramento. Operações administrativas globais e exclusões destrutivas continuam exigindo conexão; o modo offline é destinado à operação dos eventos.
+Código fonte disponível para **consulta e portfólio**. Os dados de negócio e seeds privados não estão incluídos. Uso comercial ou redistribuição do catálogo operacional não é permitido sem autorização.
 
-## Segurança
+---
 
-Consultas usam parâmetros, operações críticas de estoque usam transações, cookies são `HttpOnly` e `SameSite=Strict`, respostas incluem cabeçalhos de segurança e alterações administrativas verificam o perfil do usuário. Antes de produção, altere a credencial inicial, use HTTPS e implemente rotação/recuperação de senha e proteção CSRF com token caso a aplicação precise aceitar origens adicionais.
+**Nicolas Konishi** — desenvolvimento full-stack, domínio de eventos e operação offline.

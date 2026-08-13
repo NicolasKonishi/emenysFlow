@@ -1,3 +1,4 @@
+-- Schema das cozinheiras. Dados reais da equipe ficam em internal/database/seeds/private/013_kitchen_cooks.sql
 CREATE TABLE IF NOT EXISTS kitchen_cooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -8,9 +9,8 @@ CREATE TABLE IF NOT EXISTS kitchen_cooks (
 );
 
 INSERT OR IGNORE INTO kitchen_cooks(slug,name,active,created_at,updated_at) VALUES
-    ('cris','Cris',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
-    ('suelem','Suelem',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
-    ('geriane','Geriane',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+    ('cozinheira-a','Cozinheira A',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+    ('cozinheira-b','Cozinheira B',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
 
 ALTER TABLE events ADD COLUMN kitchen_cook_id INTEGER REFERENCES kitchen_cooks(id);
 CREATE INDEX IF NOT EXISTS idx_events_kitchen_cook ON events(kitchen_cook_id, starts_at);
@@ -19,12 +19,8 @@ INSERT OR IGNORE INTO inventory_items(
     name,description,category_id,subcategory,unit,stock_quantity,minimum_stock,damaged_quantity,location_id,
     internal_code,item_kind,ownership,requires_return,replacement_value_cents,notes,active,created_at,updated_at
 )
-SELECT 'Caixa de utensílios — Cris','Caixa pessoal da Cris com facas, colheres, ralador e demais utensílios de cozinha.',id,'Caixas das cozinheiras','caixa',1,0,0,5,'COZ-CRIS-UTENSILIOS','reusable','owned',1,0,'Conferir o conteúdo completo na saída e no retorno.',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha'
-UNION ALL SELECT 'Caixa de temperos — Cris','Caixa pessoal da Cris com os temperos utilizados no preparo.',id,'Caixas das cozinheiras','caixa',1,0,0,5,'COZ-CRIS-TEMPEROS','reusable','owned',1,0,'Conferir o conteúdo completo na saída e no retorno.',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha'
-UNION ALL SELECT 'Caixa de utensílios — Suelem','Caixa pessoal da Suelem com facas, colheres, ralador e demais utensílios de cozinha.',id,'Caixas das cozinheiras','caixa',1,0,0,5,'COZ-SUELEM-UTENSILIOS','reusable','owned',1,0,'Conferir o conteúdo completo na saída e no retorno.',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha'
-UNION ALL SELECT 'Caixa de temperos — Suelem','Caixa pessoal da Suelem com os temperos utilizados no preparo.',id,'Caixas das cozinheiras','caixa',1,0,0,5,'COZ-SUELEM-TEMPEROS','reusable','owned',1,0,'Conferir o conteúdo completo na saída e no retorno.',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha'
-UNION ALL SELECT 'Caixa de utensílios — Geriane','Caixa pessoal da Geriane com facas, colheres, ralador e demais utensílios de cozinha.',id,'Caixas das cozinheiras','caixa',1,0,0,5,'COZ-GERIANE-UTENSILIOS','reusable','owned',1,0,'Conferir o conteúdo completo na saída e no retorno.',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha'
-UNION ALL SELECT 'Caixa de temperos — Geriane','Caixa pessoal da Geriane com os temperos utilizados no preparo.',id,'Caixas das cozinheiras','caixa',1,0,0,5,'COZ-GERIANE-TEMPEROS','reusable','owned',1,0,'Conferir o conteúdo completo na saída e no retorno.',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha';
+SELECT 'Caixa da cozinheira — A','Caixa pessoal de utensílios e temperos.',id,'Caixas das cozinheiras','caixa',1,0,0,1,'COZ-A-BOX','reusable','owned',1,0,'',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha'
+UNION ALL SELECT 'Caixa da cozinheira — B','Caixa pessoal de utensílios e temperos.',id,'Caixas das cozinheiras','caixa',1,0,0,1,'COZ-B-BOX','reusable','owned',1,0,'',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM inventory_categories WHERE name='Equipamentos de cozinha';
 
 CREATE TABLE IF NOT EXISTS kitchen_cook_storage_boxes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,10 +35,6 @@ CREATE TABLE IF NOT EXISTS kitchen_cook_storage_boxes (
 
 INSERT OR IGNORE INTO kitchen_cook_storage_boxes(kitchen_cook_id,inventory_item_id,box_type,active,created_at,updated_at)
 SELECT cook.id,item.id,'utensils',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-FROM kitchen_cooks cook JOIN inventory_items item ON item.internal_code='COZ-' || UPPER(cook.slug) || '-UTENSILIOS';
-
-INSERT OR IGNORE INTO kitchen_cook_storage_boxes(kitchen_cook_id,inventory_item_id,box_type,active,created_at,updated_at)
-SELECT cook.id,item.id,'spices',1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-FROM kitchen_cooks cook JOIN inventory_items item ON item.internal_code='COZ-' || UPPER(cook.slug) || '-TEMPEROS';
+FROM kitchen_cooks cook JOIN inventory_items item ON item.internal_code='COZ-' || UPPER(SUBSTR(cook.slug, -1)) || '-BOX';
 
 CREATE INDEX IF NOT EXISTS idx_kitchen_cook_boxes_cook ON kitchen_cook_storage_boxes(kitchen_cook_id, active);

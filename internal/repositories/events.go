@@ -92,6 +92,10 @@ func (s *Store) GetEvent(ctx context.Context, id int64) (models.Event, error) {
 	return scanEvent(s.db.QueryRowContext(ctx, `SELECT `+eventColumns+` FROM events e WHERE e.id = ?`, id))
 }
 
+func defaultEventName(id int64) string {
+	return fmt.Sprintf("evento-%d", id)
+}
+
 func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64) error {
 	if event.EndsAt.Before(event.StartsAt) || event.EndsAt.Equal(event.StartsAt) {
 		return fmt.Errorf("end date must be after start date")
@@ -111,6 +115,7 @@ func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64
 	if event.AdditionalGuestMarginOverride.Valid {
 		additionalMarginOverride = event.AdditionalGuestMarginOverride.Float64
 	}
+	nameWasEmpty := strings.TrimSpace(event.Name) == ""
 	if event.ID == 0 {
 		result, err := s.db.ExecContext(ctx, `INSERT INTO events(
 			template_id, client_name, name, venue, starts_at, ends_at, guest_count, has_decoration, has_welcome_drinks,
@@ -127,7 +132,18 @@ func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64
 			return fmt.Errorf("create event: %w", err)
 		}
 		event.ID, err = result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if nameWasEmpty {
+			event.Name = defaultEventName(event.ID)
+			_, err = s.db.ExecContext(ctx, `UPDATE events SET name=? WHERE id=?`, event.Name, event.ID)
+		}
 		return err
+	}
+
+	if nameWasEmpty {
+		event.Name = defaultEventName(event.ID)
 	}
 
 	return withTx(ctx, s.db, func(tx *sql.Tx) error {

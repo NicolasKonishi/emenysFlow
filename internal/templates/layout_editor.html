@@ -1,0 +1,202 @@
+{{define "layout_editor"}}
+<div class="layout-planner{{if eq .LayoutMode "standalone"}} layout-planner-standalone{{end}}" data-layout-editor
+  data-layout-mode="{{.LayoutMode}}"
+  {{if eq .LayoutMode "event"}}data-event-id="{{.Event.ID}}" data-guest-count="{{.Event.GuestCount}}" data-waiter-count="{{.StaffSummary.Waiters}}" data-export-title="{{.Event.ClientName}}"{{else}}data-layout-id="{{.StandaloneLayout.ID}}" data-guest-count="{{.StandaloneLayout.GuestCount}}" data-waiter-count="{{.StandaloneLayout.WaiterCount}}" data-export-title="{{.StandaloneLayout.Name}}" data-waiter-names='{{.StandaloneLayout.WaiterNamesJSON}}'{{if not .IsEdit}} data-layout-new="1"{{end}}{{end}}>
+
+  <div class="layout-float-top" data-layout-float-top hidden>
+    <button class="layout-float-btn" type="button" data-layout-fullscreen-exit aria-label="Sair da tela cheia">←</button>
+    <strong data-layout-float-title>{{if eq .LayoutMode "event"}}{{.Event.ClientName}}{{else}}{{.StandaloneLayout.Name}}{{end}}</strong>
+    <button class="layout-float-btn primary" type="submit" form="layout-save-form">Salvar</button>
+  </div>
+
+  <header class="page-header layout-planner-header">
+    <div>
+      {{if eq .LayoutMode "event"}}<a class="back-link" href="/events/{{.Event.ID}}">← Voltar ao evento</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.Venue}}</span><h1>Layout do salão</h1><p>Monte as mesas, atribua garçons e exporte para a equipe.</p>
+      {{else}}{{if .IsEdit}}<a class="back-link" href="/layouts">← Todos os layouts</a>{{else}}<a class="back-link" href="/layouts">← Voltar</a>{{end}}<span class="eyebrow">Layout avulso</span><h1>{{if .IsEdit}}{{.StandaloneLayout.Name}}{{else}}Novo layout avulso{{end}}</h1><h2>Informe os garçons, desenhe o salão e exporte sem precisar de um evento cadastrado.</h2>{{end}}
+    </div>
+    <div class="layout-planner-actions layout-desktop-actions">
+      <button class="button secondary" type="button" data-layout-fullscreen>⛶ Tela cheia</button>
+      <button class="button secondary" type="button" data-layout-export="png">↓ PNG</button>
+      <button class="button secondary" type="button" data-layout-export="pdf">↓ PDF</button>
+      <button class="button primary" type="submit" form="layout-save-form">Salvar layout</button>
+    </div>
+  </header>
+
+  {{if .Flash}}<div class="alert {{.FlashType}} layout-desktop-alert" role="status">{{.Flash}}</div>{{end}}
+  {{if .Error}}<div class="alert danger layout-desktop-alert">{{.Error}}</div>{{end}}
+
+  {{if eq .LayoutMode "standalone"}}
+  <form class="panel layout-meta-form layout-desktop-meta" data-layout-meta-form>
+    <div class="form-grid three">
+      <label>Nome do layout<input name="name" value="{{.StandaloneLayout.Name}}" required placeholder="Ex.: Casamento Silva — salão principal"></label>
+      <label>Local / espaço<input name="venue" value="{{.StandaloneLayout.Venue}}" placeholder="Ex.: Espaço Vale das Águas"></label>
+      <label>Convidados previstos<input type="number" min="0" name="guest_count" value="{{.StandaloneLayout.GuestCount}}" placeholder="Opcional"></label>
+      <label>Quantidade de garçons<input type="number" min="0" max="30" name="waiter_count" data-layout-waiter-count value="{{if .StandaloneLayout.WaiterCount}}{{.StandaloneLayout.WaiterCount}}{{else}}6{{end}}"></label>
+    </div>
+    <div class="layout-waiter-names" data-layout-waiter-names>
+      <div class="layout-waiter-names-header">
+        <div class="section-heading-inline"><span class="eyebrow">Equipe de garçons</span><p>Defina os nomes para aparecerem na legenda e na seleção das mesas.</p></div>
+        <button type="button" class="button secondary small" data-layout-waiter-edit>Editar garçons</button>
+      </div>
+      <div class="layout-waiter-name-grid" data-layout-waiter-name-grid hidden></div>
+    </div>
+  </form>
+  {{end}}
+
+  <div class="layout-planner-stats panel layout-desktop-stats">
+    <div><span>Mesas</span><strong data-layout-stat="tables">0</strong></div>
+    {{if eq .LayoutMode "event"}}<div><span>Convidados previstos</span><strong>{{.Event.GuestCount}}</strong></div><div><span>Garçons calculados</span><strong>{{.StaffSummary.Waiters}}</strong></div>
+    {{else}}<div><span>Convidados previstos</span><strong data-layout-stat="guests">{{.StandaloneLayout.GuestCount}}</strong></div><div><span>Garçons cadastrados</span><strong data-layout-stat="configured-waiters">{{.StandaloneLayout.WaiterCount}}</strong></div>{{end}}
+    <div><span>Garçons atribuídos</span><strong data-layout-stat="waiters">0</strong></div>
+  </div>
+
+  <div class="layout-stage" data-layout-stage>
+    <div class="layout-planner-workspace">
+      <aside class="panel layout-toolbar layout-desktop-toolbar" aria-label="Ferramentas do layout">
+        <span class="eyebrow">Ferramentas</span>
+        <div class="layout-tool-group">
+          <button class="layout-tool active" type="button" data-layout-tool="select" title="Selecionar e mover">↖ Selecionar</button>
+          <button class="layout-tool" type="button" data-layout-tool="table_round" title="Mesa redonda">○ Mesa redonda</button>
+          <button class="layout-tool" type="button" data-layout-tool="table_rect" title="Mesa retangular">▭ Mesa retangular</button>
+          <button class="layout-tool" type="button" data-layout-sheet-open="row" title="Fileira de mesas">⊞ Fileira de mesas</button>
+          <button class="layout-tool" type="button" data-layout-tool="marker" title="Área neutra">▢ Área neutra</button>
+          <button class="layout-tool" type="button" data-layout-sheet-open="props" title="Editar item selecionado">✎ Editar</button>
+        </div>
+        <div class="layout-tool-group">
+          <button class="button ghost small full" type="button" data-layout-action="duplicate">Duplicar selecionado</button>
+          <button class="button danger small full" type="button" data-layout-action="delete">Remover selecionado</button>
+        </div>
+        <div class="layout-desktop-row-panel" data-layout-row-panel hidden>
+          <span class="eyebrow">Fileira de mesas</span>
+          <form class="layout-row-form" data-layout-row-form>
+            <label>Quantidade de mesas<input type="number" min="1" max="30" name="count" value="5" required></label>
+            <label>Tipo de mesa
+              <select name="type">
+                <option value="table_round">Redonda</option>
+                <option value="table_rect">Retangular</option>
+              </select>
+            </label>
+            <label>Direção da fileira
+              <select name="direction">
+                <option value="horizontal">Horizontal</option>
+                <option value="vertical">Vertical</option>
+              </select>
+            </label>
+            <label>Garçom responsável (opcional)
+              <select name="waiter"><option value="">Sem garçom</option></select>
+            </label>
+            <p class="layout-sheet-hint">A fileira aparecerá selecionada no canvas para você arrastar e confirmar a posição.</p>
+            <button class="button primary full" type="submit">Preparar fileira</button>
+          </form>
+        </div>
+        <p class="layout-toolbar-hint">Pinça para zoom. Arraste para mover. Use ⊞ Fileira para várias mesas de uma vez.</p>
+      </aside>
+
+      <section class="panel layout-canvas-shell">
+        <div class="layout-canvas-viewport" data-layout-viewport>
+          <div class="layout-zoom-controls" data-layout-zoom-controls>
+            <button class="layout-zoom-btn" type="button" data-layout-zoom="out" aria-label="Diminuir zoom">−</button>
+            <span data-layout-zoom-label>100%</span>
+            <button class="layout-zoom-btn" type="button" data-layout-zoom="in" aria-label="Aumentar zoom">+</button>
+            <button class="layout-zoom-btn" type="button" data-layout-zoom="reset" aria-label="Resetar zoom">⊙</button>
+          </div>
+          <svg class="layout-canvas" data-layout-canvas viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas do layout">
+            <defs>
+              <pattern id="layout-grid-minor" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#d8ddd3" stroke-width="1"/>
+              </pattern>
+              <pattern id="layout-grid" width="160" height="160" patternUnits="userSpaceOnUse">
+                <rect width="160" height="160" fill="url(#layout-grid-minor)"/>
+                <path d="M 160 0 L 0 0 0 160" fill="none" stroke="#bcc7b8" stroke-width="1.5"/>
+              </pattern>
+            </defs>
+            <rect data-layout-bg-fill fill="#fafbf8"/>
+            <rect data-layout-bg-grid fill="url(#layout-grid)"/>
+            <g data-layout-layer="tables"></g>
+            <g data-layout-layer="markers"></g>
+            <g data-layout-layer="preview"></g>
+            <g data-layout-layer="selection"></g>
+          </svg>
+        </div>
+      </section>
+
+      <aside class="panel layout-props layout-desktop-props" data-layout-props hidden>
+        <span class="eyebrow">Propriedades</span>
+        <form class="layout-props-form" data-layout-props-form>
+          <label data-layout-name-field><span data-layout-name-caption>Nome / número</span><input name="label" data-layout-prop="label" placeholder="Ex.: Mesa 12"></label>
+          <label data-layout-table-field hidden>Garçom responsável
+            <select data-layout-prop="waiter"><option value="">Sem garçom</option></select>
+          </label>
+          <label class="layout-color-field" data-layout-table-field hidden>Cor da identificação <span class="layout-color-optional">(opcional)</span>
+            <div class="layout-color-picker" data-layout-color-picker>
+              <div class="layout-color-picker-row">
+                <button type="button" class="layout-color-toggle" data-layout-color-toggle aria-expanded="false">
+                  <span class="layout-color-preview" data-layout-color-preview aria-hidden="true"></span>
+                  <span data-layout-color-label>Usar cor do garçom</span>
+                </button>
+                <button type="button" class="layout-color-clear" data-layout-color-clear hidden title="Remover cor personalizada" aria-label="Remover cor personalizada">×</button>
+              </div>
+              <div class="layout-color-swatches-panel" data-layout-color-panel hidden>
+                <div class="layout-color-swatches" data-layout-color-swatches role="listbox" aria-label="Cor da identificação"></div>
+              </div>
+              <input type="hidden" name="color" data-layout-prop="color" value="">
+            </div>
+          </label>
+          <label data-layout-table-field hidden data-layout-seats-field>Lugares<input type="number" min="1" max="20" name="seats" data-layout-prop="seats" value="8"></label>
+          <label data-layout-table-field hidden data-layout-table-size-field>Tamanho da mesa
+            <select data-layout-prop="tableSize">
+              <option value="small">Pequena</option>
+              <option value="medium" selected>Média</option>
+              <option value="large">Grande</option>
+            </select>
+          </label>
+          <label data-layout-marker-field hidden data-layout-marker-size-field>Largura<input type="number" min="40" max="800" name="width" data-layout-prop="width" value="120"></label>
+          <label data-layout-marker-field hidden data-layout-marker-size-field>Altura<input type="number" min="40" max="800" name="height" data-layout-prop="height" value="80"></label>
+        </form>
+        <div class="layout-waiter-legend" data-layout-legend>
+          <span class="eyebrow">Legenda dos garçons</span>
+          <ul data-layout-legend-list></ul>
+        </div>
+      </aside>
+    </div>
+
+    <div class="layout-float-dock" data-layout-float-dock>
+      <button class="layout-dock-btn active" type="button" data-layout-tool="select" aria-label="Selecionar">↖</button>
+      <button class="layout-dock-btn" type="button" data-layout-tool="table_round" aria-label="Mesa redonda">○</button>
+      <button class="layout-dock-btn" type="button" data-layout-tool="table_rect" aria-label="Mesa retangular">▭</button>
+      <button class="layout-dock-btn" type="button" data-layout-sheet-open="row" aria-label="Fileira de mesas">⊞</button>
+      <button class="layout-dock-btn" type="button" data-layout-tool="marker" aria-label="Área neutra">▢</button>
+      <button class="layout-dock-btn" type="button" data-layout-sheet-open="props" aria-label="Editar item">✎</button>
+      <button class="layout-dock-btn" type="button" data-layout-sheet-open="menu" aria-label="Mais opções">⋯</button>
+    </div>
+
+    <div class="layout-float-sheet" data-layout-sheet hidden>
+      <div class="layout-float-sheet-backdrop" data-layout-sheet-close></div>
+      <div class="layout-float-sheet-panel">
+        <header class="layout-float-sheet-header">
+          <strong data-layout-sheet-title>Editar item</strong>
+          <button class="layout-float-btn" type="button" data-layout-sheet-close aria-label="Fechar">×</button>
+        </header>
+        <div class="layout-float-sheet-body" data-layout-sheet-body></div>
+      </div>
+    </div>
+  </div>
+
+  <form id="layout-save-form" class="layout-save-form" action="{{if eq .LayoutMode "event"}}/events/{{.Event.ID}}/layout{{else}}{{.FormAction}}{{end}}" method="post"
+    data-layout-form data-offline-form hx-boost="false"
+    data-operation-type="{{if eq .LayoutMode "event"}}save_event_layout{{else}}save_standalone_layout{{end}}"
+    data-entity-type="{{if eq .LayoutMode "event"}}event_floor_layout{{else}}standalone_floor_layout{{end}}"
+    data-entity-id="{{if eq .LayoutMode "event"}}{{.Event.ID}}{{else}}{{.StandaloneLayout.ID}}{{end}}"
+    data-version="{{if eq .LayoutMode "event"}}{{.FloorLayout.RowVersion}}{{else}}{{.StandaloneLayout.RowVersion}}{{end}}"
+    data-layout-key="{{if eq .LayoutMode "event"}}event:{{.Event.ID}}{{else}}{{if .IsEdit}}standalone:{{.StandaloneLayout.ID}}{{else}}standalone:new{{end}}{{end}}">
+    <input type="hidden" name="layout_json" data-layout-json value="{{if eq .LayoutMode "event"}}{{.FloorLayout.LayoutJSON}}{{else}}{{.StandaloneLayout.LayoutJSON}}{{end}}">
+    {{if eq .LayoutMode "standalone"}}
+    <input type="hidden" name="name" data-layout-field="name" value="{{.StandaloneLayout.Name}}">
+    <input type="hidden" name="venue" data-layout-field="venue" value="{{.StandaloneLayout.Venue}}">
+    <input type="hidden" name="guest_count" data-layout-field="guest_count" value="{{.StandaloneLayout.GuestCount}}">
+    <input type="hidden" name="waiter_count" data-layout-field="waiter_count" value="{{.StandaloneLayout.WaiterCount}}">
+    <input type="hidden" name="waiter_names_json" data-layout-field="waiter_names_json" value="{{.StandaloneLayout.WaiterNamesJSON}}">
+    {{end}}
+  </form>
+</div>
+{{end}}

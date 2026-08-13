@@ -10,14 +10,16 @@ import (
 	"time"
 
 	"buffetflow/internal/models"
+	"buffetflow/internal/repositories"
 )
 
 type offlineEventBundle struct {
-	Event      models.Event                      `json:"event"`
-	Checklist  models.Checklist                  `json:"checklist"`
-	Menu       []models.EventMenuSnapshotSection `json:"menu"`
-	ServiceIDs []int64                           `json:"service_ids"`
-	Shortages  []models.ChecklistShortage        `json:"shortages"`
+	Event       models.Event                      `json:"event"`
+	Checklist   models.Checklist                  `json:"checklist"`
+	Menu        []models.EventMenuSnapshotSection `json:"menu"`
+	ServiceIDs  []int64                           `json:"service_ids"`
+	Shortages   []models.ChecklistShortage        `json:"shortages"`
+	FloorLayout models.EventFloorLayout           `json:"floor_layout"`
 }
 
 func (a *App) offlineBootstrap(w http.ResponseWriter, r *http.Request) {
@@ -33,13 +35,15 @@ func (a *App) offlineBootstrap(w http.ResponseWriter, r *http.Request) {
 		menu, _ := a.store.EventMenuSnapshotSections(r.Context(), event.ID)
 		services, _ := a.store.EventServiceModelIDs(r.Context(), event.ID)
 		shortages, _ := a.store.ListEventShortages(r.Context(), event.ID, true)
-		bundles = append(bundles, offlineEventBundle{Event: event, Checklist: checklist, Menu: menu, ServiceIDs: services, Shortages: shortages})
+		floorLayout, _ := a.store.GetEventFloorLayout(r.Context(), event.ID)
+		bundles = append(bundles, offlineEventBundle{Event: event, Checklist: checklist, Menu: menu, ServiceIDs: services, Shortages: shortages, FloorLayout: floorLayout})
 	}
 	inventory, _ := a.store.ListInventory(r.Context(), "", "", false)
 	menus, _ := a.store.ListMenuModels(r.Context(), false)
 	services, _ := a.store.ListServiceModels(r.Context(), false)
 	settings, _ := a.store.OperationalSettings(r.Context())
-	writeJSON(w, 200, map[string]any{"schema_version": 1, "synced_at": time.Now().UTC(), "offline_access_expires_at": time.Now().Add(12 * time.Hour).UTC(), "user": user, "events": bundles, "inventory": inventory, "menu_models": menus, "service_models": services, "operational_settings": settings})
+	standaloneLayouts, _ := a.store.ListStandaloneFloorLayouts(r.Context(), "")
+	writeJSON(w, 200, map[string]any{"schema_version": 2, "synced_at": time.Now().UTC(), "offline_access_expires_at": time.Now().Add(12 * time.Hour).UTC(), "user": user, "events": bundles, "standalone_layouts": standaloneLayouts, "inventory": inventory, "menu_models": menus, "service_models": services, "operational_settings": settings})
 }
 
 func (a *App) syncOperations(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +112,32 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 		err = saveErr
 	case "update_event_draft":
 		err = a.applyOfflineEventDraft(r, eventID, request.BaseVersion, payload, user.ID)
+	case "save_event_layout":
+		layoutJSON := stringValue(payload["layout_json"])
+		if !json.Valid([]byte(layoutJSON)) {
+			err = repositories.ErrInvalidLayoutJSON
+		} else {
+			result.Version, err = a.store.SaveEventFloorLayoutVersioned(r.Context(), eventID, layoutJSON, user.ID, request.BaseVersion)
+		}
+	case "save_standalone_layout":
+		layout := models.StandaloneFloorLayout{
+			ID:              request.EntityID,
+			Name:            stringValue(payload["name"]),
+			Venue:           stringValue(payload["venue"]),
+			GuestCount:      int(numberValue(payload["guest_count"])),
+			WaiterCount:     int(numberValue(payload["waiter_count"])),
+			WaiterNamesJSON: strings.TrimSpace(stringValue(payload["waiter_names_json"])),
+			LayoutJSON:      stringValue(payload["layout_json"]),
+		}
+		if layout.Name == "" {
+			err = fmt.Errorf("informe um nome para o layout")
+		} else {
+			if layout.WaiterNamesJSON == "" {
+				layout.WaiterNamesJSON = "[]"
+			}
+			layout.LayoutJSON = mergeWaitersIntoLayoutJSON(layout.LayoutJSON, layout.WaiterNamesJSON)
+			result.EntityID, result.Version, err = a.store.SaveStandaloneFloorLayoutVersioned(r.Context(), &layout, user.ID, request.BaseVersion)
+		}
 	default:
 		err = fmt.Errorf("tipo de operação não permitido")
 	}
@@ -123,17 +153,32 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 	if strings.Contains(err.Error(), "version conflict") {
 		result.Status = "conflict"
 		result.Error = "O servidor possui uma versão mais recente."
-		if request.OperationType == "update_event_draft" {
+		switch request.OperationType {
+		case "update_event_draft":
 			if event, loadErr := a.store.GetEvent(r.Context(), eventID); loadErr == nil {
 				result.ServerSnapshot = event
 				result.Version = event.RowVersion
 			}
-		} else if checklist, loadErr := a.store.GetChecklistByEvent(r.Context(), eventID); loadErr == nil {
-			for _, item := range checklist.Items {
-				if item.ID == request.EntityID {
-					result.ServerSnapshot = item
-					result.Version = item.RowVersion
-					break
+		case "save_event_layout":
+			if layout, loadErr := a.store.GetEventFloorLayout(r.Context(), eventID); loadErr == nil {
+				result.ServerSnapshot = layout
+				result.Version = layout.RowVersion
+			}
+		case "save_standalone_layout":
+			if request.EntityID > 0 {
+				if layout, loadErr := a.store.GetStandaloneFloorLayout(r.Context(), request.EntityID); loadErr == nil {
+					result.ServerSnapshot = layout
+					result.Version = layout.RowVersion
+				}
+			}
+		default:
+			if checklist, loadErr := a.store.GetChecklistByEvent(r.Context(), eventID); loadErr == nil {
+				for _, item := range checklist.Items {
+					if item.ID == request.EntityID {
+						result.ServerSnapshot = item
+						result.Version = item.RowVersion
+						break
+					}
 				}
 			}
 		}

@@ -1,3 +1,5 @@
+//go:build private_seeds
+
 package handlers
 
 import (
@@ -61,14 +63,14 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 
 	checks := map[string]string{
 		"/":                    "Próximos eventos",
-		"/events":              "Íris do Campo",
-		"/models":              "Buffet Especial",
+		"/events":              "Cliente Demonstração",
+		"/models":              "Buffet Demonstração",
 		"/models?tab=services": "Totem fotográfico",
-		"/models/menus/7":      "Adicionar à seção",
-		"/models/services/7":   "Adicionar componente",
+		"/models/menus/1":      "Adicionar à seção",
+		"/models/services/2":   "Adicionar componente",
 		"/events/new":          `type="number" min="1" max="10" step="1" name="decoration_quantity_2"`,
-		"/events/menu-model-preview?menu_model_id=7": "Escolha de entradas",
-		"/events/1":                      "Íris do Campo",
+		"/events/menu-model-preview?menu_model_id=2": "Escolha de entradas",
+		"/events/1":                      "Cliente Demonstração",
 		"/events/1/pdf":                  "Compartilhar / WhatsApp",
 		"/inventory":                     "Copo descartável",
 		"/inventory/kitchen-boxes":       "Caixas das cozinheiras",
@@ -84,6 +86,9 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/catalog/containers/new":        "Novo recipiente",
 		"/events/1/menu":                 "Cardápio do evento",
 		"/events/1/decorations":          "Decoração do evento",
+		"/events/1/layout":               "Layout do salão",
+		"/layouts":                       "Layouts do salão",
+		"/layouts/new":                   "Novo layout avulso",
 		"/events/1/operation":            "Sincronizar agora",
 		"/events/1/operation/separating": "Separação do estoque",
 		"/events/1/operation/loading":    "Checklist rápido para a van",
@@ -94,8 +99,8 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/manifest.webmanifest":          "emenysFlow",
 		"/static/offline.html":           "Eventos disponíveis neste aparelho",
 		"/static/js/offline.js":          "buffetflow-offline",
-		"/sw.js":                         `CACHE_VERSION = "v17"`,
-		"/api/offline/bootstrap":         `"schema_version":1`,
+		"/sw.js":                         `CACHE_VERSION = "v18"`,
+		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}
 	for path, expected := range checks {
@@ -223,6 +228,33 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	var recordedOperations int
 	if err := store.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_operations WHERE client_operation_id='integration-operation-1'").Scan(&recordedOperations); err != nil || recordedOperations != 1 {
 		t.Fatalf("idempotent sync operation count=%d err=%v", recordedOperations, err)
+	}
+
+	layoutJSON := `{"version":2,"width":1400,"height":900,"waiters":[],"elements":[{"id":"t1","type":"table_round","x":100,"y":120,"width":88,"height":88,"label":"Mesa 1","seats":8}]}`
+	layoutSyncPayload := fmt.Sprintf(`[{"client_operation_id":"integration-layout-1","device_id":"integration-device","operation_type":"save_event_layout","entity_type":"event_floor_layout","entity_id":1,"base_version":0,"payload":{"event_id":1,"layout_json":%q,"layout_key":"event:1"},"local_date":"2026-08-03T12:00:00Z"}]`, layoutJSON)
+	layoutRequest, err := http.NewRequest(http.MethodPost, server.URL+"/api/sync/operations", strings.NewReader(layoutSyncPayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	layoutRequest.Header.Set("Content-Type", "application/json")
+	layoutResponse, err := client.Do(layoutRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layoutBody, _ := io.ReadAll(layoutResponse.Body)
+	layoutResponse.Body.Close()
+	if layoutResponse.StatusCode != http.StatusOK || !strings.Contains(string(layoutBody), `"status":"synced"`) {
+		t.Fatalf("layout offline sync got status %d: %s", layoutResponse.StatusCode, layoutBody)
+	}
+	syncedLayout, err := store.GetEventFloorLayout(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if syncedLayout.LayoutJSON != layoutJSON {
+		t.Fatalf("synced layout json got %q", syncedLayout.LayoutJSON)
+	}
+	if syncedLayout.RowVersion != 1 {
+		t.Fatalf("synced layout version got %d", syncedLayout.RowVersion)
 	}
 
 	starts := time.Now().In(location).AddDate(0, 1, 0).Truncate(time.Minute)

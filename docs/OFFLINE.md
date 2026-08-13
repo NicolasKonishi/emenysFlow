@@ -6,7 +6,7 @@ O emenysFlow sincroniza os eventos, cardápios, serviços, checklists, estoque e
 
 1. Com conexão, abra o sistema e aguarde o indicador `Online e sincronizado`.
 2. As páginas visitadas e o conjunto operacional ficam disponíveis localmente por 12 horas.
-3. Sem internet, alterações de separação, carregamento, faltas, itens manuais e rascunhos são gravadas na fila local.
+3. Sem internet, alterações de separação, carregamento, faltas, itens manuais, rascunhos de evento e layouts do salão são gravadas na fila local.
 4. Fotos de referência permanecem no dispositivo até o servidor confirmar o upload.
 5. Ao voltar a conexão, a sincronização inicia automaticamente. O botão `Sincronizar agora` permite antecipá-la.
 

@@ -1,11 +1,12 @@
-const CACHE_VERSION = "v17";
+const CACHE_VERSION = "v18";
 const SHELL_CACHE = `buffetflow-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `buffetflow-data-${CACHE_VERSION}`;
 const SHELL = [
   "/static/offline.html",
   "/static/css/app.css?v=14",
   "/static/js/app.js?v=9",
-  "/static/js/offline.js?v=7",
+  "/static/js/offline.js?v=8",
+  "/static/js/layout-editor.js?v=32",
   "/static/icons/icon.svg",
   "/manifest.webmanifest"
 ];
@@ -76,7 +77,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request));
     return;
   }
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/events") || url.pathname.startsWith("/inventory") || url.pathname.startsWith("/models") || url.pathname.startsWith("/catalog") || url.pathname.startsWith("/settings")) {
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/events") || url.pathname.startsWith("/layouts") || url.pathname.startsWith("/inventory") || url.pathname.startsWith("/models") || url.pathname.startsWith("/catalog") || url.pathname.startsWith("/settings")) {
     event.respondWith(networkFirst(request));
   }
 });

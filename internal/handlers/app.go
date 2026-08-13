@@ -89,6 +89,10 @@ type PageData struct {
 	DecorationProfile        models.DecorationProfile
 	Shortages                []models.ChecklistShortage
 	StaffSummary             models.StaffSummary
+	FloorLayout              models.EventFloorLayout
+	StandaloneLayout         models.StandaloneFloorLayout
+	StandaloneLayouts        []models.StandaloneFloorLayout
+	LayoutMode               string
 	OperationalSettings      []models.OperationalSetting
 	Recalculation            models.RecalculationSummary
 	CakeConfiguration        models.EventCakeConfiguration
@@ -237,6 +241,14 @@ func (a *App) Routes() http.Handler {
 	protected.HandleFunc("POST /settings/categories", a.categorySave)
 	protected.HandleFunc("POST /settings/locations", a.locationSave)
 	protected.HandleFunc("POST /settings/operational/{key}", a.operationalSettingSave)
+	protected.HandleFunc("GET /layouts", a.layoutsPage)
+	protected.HandleFunc("GET /layouts/new", a.layoutForm)
+	protected.HandleFunc("POST /layouts", a.layoutCreate)
+	protected.HandleFunc("GET /layouts/{id}", a.layoutForm)
+	protected.HandleFunc("POST /layouts/{id}", a.layoutUpdate)
+	protected.HandleFunc("POST /layouts/{id}/archive", a.layoutArchive)
+	protected.HandleFunc("GET /events/{id}/layout", a.eventLayoutPage)
+	protected.HandleFunc("POST /events/{id}/layout", a.eventLayoutSave)
 	protected.HandleFunc("GET /events/{id}/decorations", a.eventDecorationsPage)
 	protected.HandleFunc("POST /events/{id}/decorations", a.eventDecorationsSave)
 	protected.HandleFunc("POST /events/{id}/decorations/compositions", a.decorationCompositionAdd)
@@ -307,7 +319,7 @@ func (a *App) securityHeaders(next http.Handler) http.Handler {
 		}
 		writer.Header().Set("Referrer-Policy", "same-origin")
 		writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
+		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
 		if request.Method == http.MethodPost && request.Header.Get("Origin") != "" {
 			origin := request.Header.Get("Origin")
 			if !strings.HasSuffix(origin, "://"+request.Host) {

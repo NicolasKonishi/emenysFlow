@@ -70,6 +70,11 @@ func main() {
 		return
 	}
 
+	if err := database.ApplyPrivateSeeds(ctx, db); err != nil {
+		logger.Error("apply private seeds", "error", err)
+		os.Exit(1)
+	}
+
 	app := handlers.New(store, authService, checklistService, logger, location)
 	server := &http.Server{
 		Addr:              address,

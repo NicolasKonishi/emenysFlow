@@ -1,5 +1,24 @@
+# Banco local
+/data/
 /data/*.db
 /data/*.db-*
+
+# Binários e cobertura
 /buffetflow.exe
-/coverage.out
+*.exe
+coverage.out
+
+# Dados operacionais proprietários (cardápios, serviços, estoque real)
+/internal/database/seeds/private/*.sql
+
+# Ambiente e IDE
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+*.iml
+
+# SO
 .DS_Store
+Thumbs.db

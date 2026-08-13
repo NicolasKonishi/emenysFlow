@@ -9,9 +9,10 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icons/icon.svg">
-  <link rel="stylesheet" href="/static/css/app.css?v=19">
-  <script defer src="/static/js/app.js?v=13"></script>
-  <script defer src="/static/js/offline.js?v=7"></script>
+  <link rel="stylesheet" href="/static/css/app.css?v=43">
+  <script defer src="/static/js/app.js?v=14"></script>
+  <script defer src="/static/js/layout-editor.js?v=32"></script>
+  <script defer src="/static/js/offline.js?v=8"></script>
 </head>
 <body {{if .User.ID}}class="app-shell"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
   {{if .User.ID}}
@@ -23,6 +24,7 @@
     <nav class="nav-list">
       <a href="/" {{if eq .CurrentNav "dashboard"}}aria-current="page"{{end}}><span class="nav-icon">⌂</span>Visão geral</a>
       <a href="/events" {{if eq .CurrentNav "events"}}aria-current="page"{{end}}><span class="nav-icon">◫</span>Eventos</a>
+      <a href="/layouts" {{if eq .CurrentNav "layouts"}}aria-current="page"{{end}}><span class="nav-icon">▣</span>Layouts</a>
       <a href="/models" {{if eq .CurrentNav "models"}}aria-current="page"{{end}}><span class="nav-icon">▦</span>Modelos</a>
       <a href="/catalog" {{if eq .CurrentNav "catalog"}}aria-current="page"{{end}}><span class="nav-icon">☷</span>Cardápios</a>
       <a href="/inventory" {{if eq .CurrentNav "inventory"}}aria-current="page"{{end}}><span class="nav-icon">▤</span>Estoque</a>
@@ -60,7 +62,7 @@
     <a href="/" {{if eq .CurrentNav "dashboard"}}aria-current="page"{{end}}><span>⌂</span>Início</a>
     <a href="/events" {{if eq .CurrentNav "events"}}aria-current="page"{{end}}><span>◫</span>Eventos</a>
     <a class="mobile-create" href="/events/new" aria-label="Novo evento"><span>＋</span></a>
-    <a href="/catalog" {{if eq .CurrentNav "catalog"}}aria-current="page"{{end}}><span>☷</span>Cardápio</a>
+    <a href="/layouts" {{if eq .CurrentNav "layouts"}}aria-current="page"{{end}}><span>▣</span>Layouts</a>
     <a href="/inventory" {{if eq .CurrentNav "inventory"}}aria-current="page"{{end}}><span>▤</span>Estoque</a>
   </nav>
   {{end}}

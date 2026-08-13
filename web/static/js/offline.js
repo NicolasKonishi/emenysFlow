@@ -2,7 +2,7 @@
   "use strict";
 
   const DB_NAME = "buffetflow-offline";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const DEVICE_KEY = "buffetflow_device_id";
   let registration;
   let synchronizing = false;
@@ -32,6 +32,7 @@
           store.createIndex("status", "status");
         }
         if (!db.objectStoreNames.contains("conflicts")) db.createObjectStore("conflicts", { keyPath: "client_operation_id" });
+        if (!db.objectStoreNames.contains("layout_drafts")) db.createObjectStore("layout_drafts", { keyPath: "key" });
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -96,8 +97,23 @@
   }
 
   async function queueForm(form) {
+    if (form.hasAttribute("data-layout-form")) {
+      form.dispatchEvent(new CustomEvent("layout-persist", { bubbles: false }));
+    }
     const entityRoot = form.closest("[data-entity-id]");
-    const entityMatch = form.action.match(/\/(?:items|shortages)\/(\d+)(?:\/|$)/);
+    const entityMatch = form.action.match(/\/(?:items|shortages|layouts)\/(\d+)(?:\/|$)/);
+    const payload = formPayload(form);
+    if (form.dataset.layoutKey) payload.layout_key = form.dataset.layoutKey;
+    if (form.hasAttribute("data-layout-form") && form.dataset.layoutKey) {
+      const existing = await getAll("operations").catch(() => []);
+      for (const item of existing) {
+        if ((item.status === "pending" || item.status === "failed")
+          && item.payload?.layout_key === form.dataset.layoutKey
+          && ["save_event_layout", "save_standalone_layout"].includes(item.operation_type)) {
+          await deleteRecord("operations", item.client_operation_id);
+        }
+      }
+    }
     const operation = {
       client_operation_id: uuid(),
       device_id: deviceID(),
@@ -105,7 +121,7 @@
       entity_type: form.dataset.entityType,
       entity_id: Number(form.dataset.entityId || entityRoot?.dataset.entityId || entityMatch?.[1] || 0),
       base_version: Number(form.dataset.version || form.querySelector('[name="version"]')?.value || entityRoot?.dataset.version || 0),
-      payload: formPayload(form),
+      payload,
       local_date: new Date().toISOString(),
       attempts: 0,
       last_attempt: null,
@@ -114,13 +130,86 @@
     };
     await putRecord("operations", operation);
     form.dataset.offlineQueued = "true";
-    const button = form.querySelector('button[type="submit"], button:not([type])');
+    const button = form.querySelector('button[type="submit"], button:not([type])') || document.querySelector(`button[form="${form.id}"]`);
     if (button) {
       button.dataset.originalLabel ||= button.textContent;
       button.textContent = "Salvo no aparelho";
     }
+    if (form.hasAttribute("data-layout-form") && form.dataset.layoutKey) {
+      await deleteRecord("layout_drafts", form.dataset.layoutKey).catch(() => null);
+      showLayoutOfflineNotice("Layout salvo no aparelho. Sincroniza ao voltar online.");
+    }
     await updateStatus("Offline — alteração salva no aparelho", "pending");
     return operation;
+  }
+
+  function showLayoutOfflineNotice(message) {
+    const editor = document.querySelector("[data-layout-editor]");
+    if (!editor) return;
+    let notice = editor.querySelector("[data-layout-offline-notice]");
+    if (!notice) {
+      notice = document.createElement("div");
+      notice.className = "alert info layout-offline-notice";
+      notice.dataset.layoutOfflineNotice = "1";
+      notice.setAttribute("role", "status");
+      editor.querySelector(".layout-planner-header")?.after(notice);
+    }
+    notice.textContent = message;
+  }
+
+  async function saveLayoutDraft(key, draft) {
+    if (!key) return;
+    await putRecord("layout_drafts", { key, ...draft, updated_at: new Date().toISOString() });
+  }
+
+  async function loadLayoutDraft(key) {
+    if (!key) return null;
+    return getRecord("layout_drafts", key).catch(() => null);
+  }
+
+  async function deleteLayoutDraft(key) {
+    if (!key) return;
+    await deleteRecord("layout_drafts", key).catch(() => null);
+  }
+
+  async function applyStandaloneLayoutSyncResult(operation, result) {
+    if (operation.operation_type !== "save_standalone_layout" || result.status !== "synced" || !result.entity_id) return;
+    const layoutKey = operation.payload?.layout_key;
+    if (!layoutKey) return;
+    const all = await getAll("operations").catch(() => []);
+    for (const item of all) {
+      if (item.client_operation_id === operation.client_operation_id) continue;
+      if (item.operation_type !== "save_standalone_layout" || item.payload?.layout_key !== layoutKey) continue;
+      if (item.status === "pending" || item.status === "failed") {
+        item.entity_id = result.entity_id;
+        item.base_version = result.version || item.base_version;
+        await putRecord("operations", item);
+      }
+    }
+    const form = document.querySelector("#layout-save-form[data-operation-type='save_standalone_layout']");
+    if (form && form.dataset.layoutKey === layoutKey) {
+      form.dataset.entityId = String(result.entity_id);
+      form.dataset.version = String(result.version || form.dataset.version || 0);
+      form.action = `/layouts/${result.entity_id}`;
+      form.dataset.layoutKey = `standalone:${result.entity_id}`;
+      const editor = document.querySelector("[data-layout-editor]");
+      if (editor) editor.dataset.layoutId = String(result.entity_id);
+    }
+  }
+
+  async function applyLayoutSyncResult(operation, result) {
+    if (!["save_event_layout", "save_standalone_layout"].includes(operation.operation_type) || result.status !== "synced") return;
+    const form = document.querySelector("#layout-save-form");
+    if (!form || form.dataset.layoutKey !== operation.payload?.layout_key) return;
+    if (result.version) form.dataset.version = String(result.version);
+    form.dataset.offlineQueued = "";
+    document.querySelectorAll(`button[form="${form.id}"]`).forEach((button) => {
+      if (button.dataset.originalLabel) button.textContent = button.dataset.originalLabel;
+    });
+    await deleteLayoutDraft(form.dataset.layoutKey);
+    if (operation.operation_type === "save_standalone_layout") {
+      await applyStandaloneLayoutSyncResult(operation, result);
+    }
   }
 
   async function queueLoadingDecision(eventID, itemID, decision, missingQuantity) {
@@ -268,12 +357,17 @@
           if (result.entity_id) operation.entity_id = result.entity_id;
           await putRecord("operations", operation);
           if (result.status === "conflict") await putRecord("conflicts", { ...operation, server_snapshot: result.server_snapshot, server_version: result.version, detected_at: new Date().toISOString() });
+          if (result.status === "synced") await applyLayoutSyncResult(operation, result);
         }
       }
       await syncPhotos();
       await refreshBootstrap();
       renderConflicts();
       await updateStatus();
+      const syncedLayouts = pending.filter((item) => ["save_event_layout", "save_standalone_layout"].includes(item.operation_type) && item.status === "synced");
+      if (syncedLayouts.length && document.querySelector("[data-layout-editor]")) {
+        showLayoutOfflineNotice("Layout sincronizado com o servidor.");
+      }
     } catch (error) {
       const operations = await getAll("operations").catch(() => []);
       for (const operation of operations.filter((item) => item.status === "syncing")) {
@@ -307,8 +401,12 @@
           conflict.base_version = conflict.server_version || conflict.base_version;
           conflict.status = "pending";
           conflict.last_error = "";
-          if (button.dataset.choice === "merge" && conflict.server_snapshot && conflict.operation_type === "update_event_draft") {
-            conflict.payload = { ...conflict.server_snapshot, ...conflict.payload };
+          if (button.dataset.choice === "merge" && conflict.server_snapshot) {
+            if (conflict.operation_type === "update_event_draft") {
+              conflict.payload = { ...conflict.server_snapshot, ...conflict.payload };
+            } else if (["save_event_layout", "save_standalone_layout"].includes(conflict.operation_type)) {
+              conflict.base_version = conflict.server_version || conflict.base_version;
+            }
           }
         }
         const clean = { ...conflict };
@@ -366,6 +464,14 @@
     await Promise.all(keys.filter((key) => key.startsWith("buffetflow-")).map((key) => caches.delete(key)));
     localStorage.removeItem(DEVICE_KEY);
   }
+
+  window.BuffetFlowOffline = {
+    saveLayoutDraft,
+    loadLayoutDraft,
+    deleteLayoutDraft,
+    showLayoutOfflineNotice,
+    syncOperations,
+  };
 
   document.addEventListener("submit", async (event) => {
     const logout = event.target.closest('form[action="/logout"]');

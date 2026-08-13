@@ -49,36 +49,81 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
-		var applied int
-		err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version = ?", entry.Name()).Scan(&applied)
-		if err != nil {
-			return fmt.Errorf("check migration %s: %w", entry.Name(), err)
-		}
-		if applied > 0 {
-			continue
-		}
-
-		body, err := os.ReadFile(filepath.Join(migrationsPath, entry.Name()))
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
-		}
-		tx, err := db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin migration %s: %w", entry.Name(), err)
-		}
-		if _, err = tx.ExecContext(ctx, string(body)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("execute migration %s: %w", entry.Name(), err)
-		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)", entry.Name(), time.Now().UTC().Format(time.RFC3339)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("record migration %s: %w", entry.Name(), err)
-		}
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %s: %w", entry.Name(), err)
+		if err := applySQLFile(ctx, db, "schema_migrations", filepath.Join(migrationsPath, entry.Name()), entry.Name()); err != nil {
+			return fmt.Errorf("migration %s: %w", entry.Name(), err)
 		}
 	}
 	return nil
+}
+
+// ApplyPrivateSeeds loads operational catalog data kept outside version control.
+// Called from cmd/server after migrations; tests use Migrate only.
+func ApplyPrivateSeeds(ctx context.Context, db *sql.DB) error {
+	privatePath := privateSeedDirectory()
+	entries, err := os.ReadDir(privatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read private seeds: %w", err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		if err := applySQLFile(ctx, db, "private_seed_migrations", filepath.Join(privatePath, entry.Name()), entry.Name()); err != nil {
+			return fmt.Errorf("private seed %s: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+func applySQLFile(ctx context.Context, db *sql.DB, ledgerTable, path, version string) error {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		version TEXT PRIMARY KEY,
+		applied_at TEXT NOT NULL
+	)`, ledgerTable)); err != nil {
+		return fmt.Errorf("create ledger: %w", err)
+	}
+
+	var applied int
+	err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE version = ?", ledgerTable), version).Scan(&applied)
+	if err != nil {
+		return fmt.Errorf("check version: %w", err)
+	}
+	if applied > 0 {
+		return nil
+	}
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	if _, err = tx.ExecContext(ctx, string(body)); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("execute SQL: %w", err)
+	}
+	if _, err = tx.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s(version, applied_at) VALUES(?, ?)", ledgerTable), version, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("record version: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
+func privateSeedDirectory() string {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		return filepath.Join("internal", "database", "seeds", "private")
+	}
+	return filepath.Join(filepath.Dir(sourceFile), "seeds", "private")
 }
 
 func migrationDirectory() string {

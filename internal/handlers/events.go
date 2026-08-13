@@ -104,8 +104,8 @@ func (a *App) parseEventForm(request *http.Request, id int64) (models.Event, err
 		AdditionalGuestMarginOverride: parseOptionalFloat(request.FormValue("additional_guest_margin_override")), UsesGlassware: boolForm(request.FormValue("uses_glassware")),
 		KitchenCookID: parseOptionalInt(request.FormValue("kitchen_cook_id")),
 	}
-	if event.ClientName == "" || event.Name == "" || event.Venue == "" {
-		return event, fmt.Errorf("Cliente, nome do evento e local são obrigatórios.")
+	if event.ClientName == "" || event.Venue == "" {
+		return event, fmt.Errorf("Cliente e local são obrigatórios.")
 	}
 	if event.SafetyMarginPercent < 0 || event.SafetyMarginPercent > 100 {
 		return event, fmt.Errorf("A margem deve estar entre 0%% e 100%%.")

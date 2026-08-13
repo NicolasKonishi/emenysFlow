@@ -1,3 +1,5 @@
+//go:build private_seeds
+
 package repositories
 
 import (

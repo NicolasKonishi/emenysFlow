@@ -137,7 +137,7 @@ func shortageResolutionLabel(value string) string {
 func (r *Renderer) Render(writer io.Writer, page string, data any, partial bool) error {
 	basePath, pagePath := templatePaths(page)
 	componentsPath := filepath.Join(filepath.Dir(basePath), "components.html")
-	tmpl, err := template.New("base.html").Funcs(r.functions).ParseFiles(basePath, componentsPath, pagePath)
+	tmpl, err := template.New("base.html").Funcs(r.functions).ParseFiles(basePath, componentsPath, filepath.Join(filepath.Dir(basePath), "layout_editor.html"), pagePath)
 	if err != nil {
 		return fmt.Errorf("parse template %s: %w", page, err)
 	}

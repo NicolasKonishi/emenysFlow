@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="page-wrap">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Planejamento operacional</span>
+      <h1>Layouts do salão</h1>
+      <p>Monte plantas de mesas e garçons com ou sem evento cadastrado.</p>
+    </div>
+    <a class="button primary" href="/layouts/new"><span>＋</span>Novo layout avulso</a>
+  </header>
+  {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
+  <section class="toolbar panel slim">
+    <form class="search-form" action="/layouts" method="get"><label class="search-box"><span>⌕</span><input type="search" name="q" value="{{.Query}}" placeholder="Buscar nome ou local..." aria-label="Buscar layouts"></label><button class="button secondary" type="submit">Buscar</button></form>
+    <span class="result-count">{{len .StandaloneLayouts}} layouts avulsos</span>
+  </section>
+  <section class="panel table-panel">
+    {{if .StandaloneLayouts}}
+    <div class="responsive-table"><table><thead><tr><th>Layout</th><th>Local</th><th>Garçons</th><th>Atualizado</th><th></th></tr></thead><tbody>
+      {{range .StandaloneLayouts}}<tr>
+        <td data-label="Layout"><strong>{{.Name}}</strong>{{if .GuestCount}}<small>{{.GuestCount}} convidados previstos</small>{{end}}</td>
+        <td data-label="Local">{{if .Venue}}{{.Venue}}{{else}}—{{end}}</td>
+        <td data-label="Garçons"><strong>{{.WaiterCount}}</strong></td>
+        <td data-label="Atualizado">{{dateTime .UpdatedAt}}</td>
+        <td class="row-action"><a class="button ghost small" href="/layouts/{{.ID}}">Editar →</a><form action="/layouts/{{.ID}}/archive" method="post" data-confirm="Remover este layout avulso?"><button class="button danger small" type="submit">Remover</button></form></td>
+      </tr>{{end}}
+    </tbody></table></div>
+    {{else}}<div class="empty-state"><span>▣</span><strong>Nenhum layout avulso ainda</strong><p>Crie um layout independente ou abra o layout dentro de um evento.</p><a class="button primary" href="/layouts/new">Criar layout avulso</a></div>{{end}}
+  </section>
+  <section class="panel layout-list-hint"><span class="eyebrow">Layouts por evento</span><p>Para montar o salão de um evento já cadastrado, abra o evento e use <strong>Layout do salão</strong>.</p><a class="button secondary" href="/events">Ver eventos</a></section>
+</div>
+{{end}}

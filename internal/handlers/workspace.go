@@ -10,6 +10,9 @@ import (
 const workspaceCookie = "buffet_workspace"
 
 func workspaceFor(request *http.Request, nav string) string {
+	if nav == "workspace" {
+		return ""
+	}
 	if nav == "offline" {
 		return "offline"
 	}
@@ -68,6 +71,12 @@ func (a *App) health(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "service": "emenysFlow"})
 }
 
+func (a *App) workspaceChooser(writer http.ResponseWriter, request *http.Request) {
+	data := a.baseData(request, "Escolher área", "workspace")
+	data.Workspace = ""
+	a.render(writer, request, "workspace", data)
+}
+
 func (a *App) onlineDashboard(writer http.ResponseWriter, request *http.Request) {
 	setWorkspaceCookie(writer, "online")
 	data := a.baseData(request, "Visão geral", "dashboard")
@@ -112,15 +121,11 @@ func (a *App) setWorkspace(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	setWorkspaceCookie(writer, workspace)
-	next := strings.TrimSpace(request.FormValue("next"))
-	if next == "" {
-		next = request.Header.Get("Referer")
-	}
 	if workspace == "offline" {
 		a.redirect(writer, request, "/offline", http.StatusSeeOther)
 		return
 	}
-	a.redirect(writer, request, safeWorkspaceNext(next, request), http.StatusSeeOther)
+	a.redirect(writer, request, "/online", http.StatusSeeOther)
 }
 
 func safeWorkspaceNext(next string, request *http.Request) string {

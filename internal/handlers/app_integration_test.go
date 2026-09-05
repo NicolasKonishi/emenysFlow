@@ -103,7 +103,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/static/offline.html":           "Conexão restabelecida",
 		"/static/js/offline.js":          "/api/health",
 		"/static/js/layout-division.js":  "suggestFloorWaiterDivision",
-		"/sw.js":                         `CACHE_VERSION = "v32"`,
+		"/sw.js":                         `CACHE_VERSION = "v33"`,
 		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}

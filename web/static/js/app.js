@@ -328,7 +328,7 @@ function initializeSimpleChecklist(root = document) {
 
       let pointer = null;
       const startSwipe = (event) => {
-        if (event.target.closest("button, a, input, select, textarea")) return;
+        if (event.pointerType === "mouse" && event.button !== 0) return;
         pointer = {
           id: event.pointerId,
           x: event.clientX,
@@ -349,6 +349,7 @@ function initializeSimpleChecklist(root = document) {
             return;
           }
           pointer.locked = true;
+          card.dataset.didSwipe = "1";
         }
         event.preventDefault();
         const x = Math.max(-140, Math.min(140, dx));
@@ -359,6 +360,7 @@ function initializeSimpleChecklist(root = document) {
       const endSwipe = (event) => {
         if (!pointer || event.pointerId !== pointer.id) return;
         const dx = event.clientX - pointer.x;
+        const swiped = pointer.locked;
         pointer = null;
         if (dx >= 72) {
           postAction(card, "check");
@@ -369,12 +371,19 @@ function initializeSimpleChecklist(root = document) {
           return;
         }
         resetSwipe(card);
+        if (!swiped) card.dataset.didSwipe = "";
       };
 
       front.addEventListener("pointerdown", startSwipe);
       front.addEventListener("pointermove", moveSwipe);
       front.addEventListener("pointerup", endSwipe);
       front.addEventListener("pointercancel", endSwipe);
+      front.addEventListener("click", (event) => {
+        if (card.dataset.didSwipe !== "1") return;
+        event.preventDefault();
+        event.stopPropagation();
+        card.dataset.didSwipe = "";
+      }, true);
     });
     updateProgress();
   });

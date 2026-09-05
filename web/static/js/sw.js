@@ -1,15 +1,16 @@
-const CACHE_VERSION = "v25";
+const CACHE_VERSION = "v26";
 const SHELL_CACHE = `buffetflow-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `buffetflow-data-${CACHE_VERSION}`;
 const SHELL = [
   "/static/offline.html",
-  "/static/css/app.css?v=50",
+  "/static/css/app.css?v=51",
   "/static/js/icons.js?v=1",
   "/static/js/app.js?v=15",
   "/static/js/offline.js?v=12",
   "/static/js/layout-editor.js?v=34",
-  "/static/icons/icon.svg",
-  "/static/icons/emenys-mark.svg",
+  "/static/icons/icon-512.png",
+  "/static/icons/emenys-mark.png",
+  "/static/icons/emenys-mark-ink.png",
   "/manifest.webmanifest"
 ];
 

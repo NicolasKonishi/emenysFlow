@@ -71,9 +71,8 @@ body::before {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: url("/static/icons/emenys-mark.svg") center 46% / min(72vmin, 680px) no-repeat;
-  opacity: .09;
-  filter: invert(1);
+  background: url("/static/icons/emenys-mark.png") center 46% / min(78vmin, 720px) no-repeat;
+  opacity: .14;
 }
 h1, h2, .brand strong, .login-brand strong {
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;

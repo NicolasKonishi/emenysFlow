@@ -13,7 +13,16 @@ func TestIconSVGKnownNames(t *testing.T) {
 	}
 	for _, name := range names {
 		markup := string(iconSVG(name))
-		if markup == "" || !strings.Contains(markup, "<svg") {
+		if markup == "" {
+			t.Fatalf("icon %q should return markup", name)
+		}
+		if name == "mark" {
+			if !strings.Contains(markup, "emenys-mark-ink.png") {
+				t.Fatal("mark should use the extracted brand logo")
+			}
+			continue
+		}
+		if !strings.Contains(markup, "<svg") {
 			t.Fatalf("icon %q should return svg markup", name)
 		}
 	}

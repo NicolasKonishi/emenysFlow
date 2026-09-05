@@ -593,7 +593,7 @@ body.layout-sheet-open { overflow:hidden; }body.layout-fullscreen-active .sideba
   .sidebar { display: none; }
   .mobile-header { position: fixed; inset: 0 0 auto; z-index: 20; display: flex; align-items: center; justify-content: space-between; height: 58px; padding: 0 17px; color: white; background: rgba(10,10,10,.82); border-bottom: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(18px); }
   .brand.compact { padding: 0; }
-  .brand.compact .brand-mark { width: 32px; height: 32px; border-radius: 9px; }
+  .brand.compact .brand-mark { width: 32px; height: 32px; border-radius: 50%; padding: 5px; }
   .mobile-header .avatar { width: 31px; height: 31px; font-size: .76rem; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 20; display: grid; grid-template-columns: repeat(5,1fr); height: 70px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: rgba(10,10,10,.82); backdrop-filter: blur(18px); }
   .mobile-nav a { display: grid; place-content: center; justify-items: center; gap: 3px; color: var(--muted); font-size: .55rem; font-weight: 750; }

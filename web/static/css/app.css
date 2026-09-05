@@ -812,7 +812,8 @@ body.layout-sheet-open { overflow:hidden; }body.layout-fullscreen-active .sideba
   .workspace-chooser .mobile-nav-offline { display: none !important; }
   .workspace-chooser .mobile-nav-chooser { display: grid; }
   .reconnect-banner { top: 58px; flex-direction: column; align-items: stretch; }
-  .workspace-main { padding:24px 16px 96px; }
+  .workspace-main { place-items:start center; min-height:auto; padding:24px 16px 120px; }
+  .workspace-chooser { width:100%; padding-bottom:12px; }
   .workspace-chooser-header { flex-direction:column; }
   .workspace-card-grid, .offline-event-grid, .offline-event-progress { grid-template-columns:1fr; }
   .sync-preference-actions { flex-direction:column; align-items:stretch; }

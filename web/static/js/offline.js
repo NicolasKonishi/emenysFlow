@@ -13,6 +13,7 @@
   const canUseOfflineData = () => Boolean(document.querySelector(".app-shell, [data-offline-hub], [data-sync-status-bar], [data-offline-home], [data-download-offline]"));
   const HEALTH_URL = "/api/health";
   const WORKSPACE_KEY = "buffetflow_workspace";
+  const WAS_OFFLINE_KEY = "buffetflow_was_offline";
   const PROBE_MS = 8000;
   let serviceReachable = null;
   let reconnectDismissed = false;
@@ -125,13 +126,38 @@
 
   function persistWorkspace(mode) {
     localStorage.setItem(WORKSPACE_KEY, mode);
-    document.cookie = `${"buffet_workspace"}=${mode}; Path=/; Max-Age=${365 * 24 * 60 * 60}; SameSite=Lax`;
+    document.cookie = `buffet_workspace=${mode}; Path=/; Max-Age=${365 * 24 * 60 * 60}; SameSite=Lax`;
     document.body.classList.remove("workspace-online", "workspace-offline");
     document.body.classList.add(`workspace-${mode}`);
     document.body.dataset.workspace = mode;
     document.querySelectorAll(".workspace-label").forEach((node) => {
       node.textContent = mode === "offline" ? (node.closest(".mobile-header") ? "Offline" : "Modo offline") : (node.closest(".mobile-header") ? "emenysFlow" : "Modo online");
     });
+  }
+
+  function onOfflineHub() {
+    const path = location.pathname;
+    return path === "/offline" || path.endsWith("/offline.html") || Boolean(document.querySelector("[data-offline-home], [data-offline-hub]"));
+  }
+
+  function markDisconnected() {
+    sessionStorage.setItem(WAS_OFFLINE_KEY, "1");
+  }
+
+  function wasDisconnected() {
+    return sessionStorage.getItem(WAS_OFFLINE_KEY) === "1";
+  }
+
+  function clearDisconnected() {
+    sessionStorage.removeItem(WAS_OFFLINE_KEY);
+  }
+
+  function openOnlineMode() {
+    reconnectDismissed = true;
+    clearDisconnected();
+    persistWorkspace("online");
+    showReconnectBanner(false);
+    if (onOfflineHub()) location.assign("/");
   }
 
   function showReconnectBanner(visible) {
@@ -169,6 +195,7 @@
       failCount += 1;
       if (failCount < 2 && previous !== false && navigator.onLine) return reachable;
       reconnectDismissed = false;
+      markDisconnected();
       showReconnectBanner(false);
       persistWorkspace("offline");
       await updateStatus("Sem conexão com o emenysFlow", "offline");
@@ -179,10 +206,12 @@
       return reachable;
     }
     failCount = 0;
-    if (currentWorkspace() === "offline") {
-      if (!reconnectDismissed) showReconnectBanner(true);
+    if (wasDisconnected() && onOfflineHub() && !reconnectDismissed) {
+      persistWorkspace("offline");
+      showReconnectBanner(true);
       await updateStatus("Serviço online — continue offline ou abra o sistema completo", "online");
     } else {
+      if (!onOfflineHub()) clearDisconnected();
       persistWorkspace("online");
       showReconnectBanner(false);
       await updateStatus("Conectado ao emenysFlow", "online");
@@ -695,7 +724,10 @@
       reconnectDismissed = true;
       showReconnectBanner(false);
     }
-    if (event.target.closest("[data-open-online]")) persistWorkspace("online");
+    if (event.target.closest("[data-open-online]")) {
+      event.preventDefault();
+      openOnlineMode();
+    }
   });
   window.addEventListener("online", () => watchServiceConnection());
   window.addEventListener("offline", () => applyServiceState(false));

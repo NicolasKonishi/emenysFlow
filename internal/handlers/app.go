@@ -284,6 +284,9 @@ func (a *App) baseData(request *http.Request, title, nav string) PageData {
 }
 
 func (a *App) render(writer http.ResponseWriter, request *http.Request, page string, data PageData) {
+	if data.Workspace != "" {
+		setWorkspaceCookie(writer, data.Workspace)
+	}
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.renderer.Render(writer, page, data, request.Header.Get("HX-Request") == "true"); err != nil {
 		a.logger.Error("render page", "page", page, "error", err)

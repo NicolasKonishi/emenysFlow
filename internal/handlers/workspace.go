@@ -2,26 +2,16 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
 const workspaceCookie = "buffet_workspace"
 
-func workspaceFor(request *http.Request, nav string) string {
-	cookie := workspaceFromRequest(request)
+func workspaceFor(_ *http.Request, nav string) string {
 	if nav == "offline" {
 		return "offline"
-	}
-	if cookie == "offline" && (nav == "layouts" || nav == "events") {
-		return "offline"
-	}
-	switch nav {
-	case "dashboard", "events", "inventory", "models", "catalog", "rules", "settings", "decorations", "layouts":
-		return "online"
-	}
-	if cookie != "" {
-		return cookie
 	}
 	return "online"
 }
@@ -110,11 +100,39 @@ func (a *App) setWorkspace(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	setWorkspaceCookie(writer, workspace)
+	next := strings.TrimSpace(request.FormValue("next"))
+	if next == "" {
+		next = request.Header.Get("Referer")
+	}
 	if workspace == "offline" {
 		a.redirect(writer, request, "/offline", http.StatusSeeOther)
 		return
 	}
-	a.redirect(writer, request, "/", http.StatusSeeOther)
+	a.redirect(writer, request, safeWorkspaceNext(next, request), http.StatusSeeOther)
+}
+
+func safeWorkspaceNext(next string, request *http.Request) string {
+	if next == "" {
+		return "/"
+	}
+	if strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") {
+		if strings.HasPrefix(next, "/offline") {
+			return "/"
+		}
+		return next
+	}
+	parsed, err := url.Parse(next)
+	if err != nil || parsed.Host != request.Host {
+		return "/"
+	}
+	path := parsed.Path
+	if path == "" || strings.HasPrefix(path, "/offline") {
+		return "/"
+	}
+	if parsed.RawQuery != "" {
+		return path + "?" + parsed.RawQuery
+	}
+	return path
 }
 
 func operationNav(request *http.Request) string {

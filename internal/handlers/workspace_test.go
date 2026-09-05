@@ -27,14 +27,25 @@ func TestWorkspaceForUsesNavAndCookie(t *testing.T) {
 		t.Fatalf("offline workspace %q", got)
 	}
 	if got := workspaceFor(request, "layouts"); got != "online" {
-		t.Fatalf("layouts without cookie should be online, got %q", got)
+		t.Fatalf("layouts should stay online on a live request, got %q", got)
 	}
 	request.AddCookie(&http.Cookie{Name: workspaceCookie, Value: "offline"})
-	if got := workspaceFor(request, "layouts"); got != "offline" {
-		t.Fatalf("layouts with offline cookie %q", got)
+	if got := workspaceFor(request, "layouts"); got != "online" {
+		t.Fatalf("layouts served by the server should be online even with offline cookie, got %q", got)
 	}
-	if got := workspaceFor(request, "events"); got != "offline" {
-		t.Fatalf("events with offline cookie %q", got)
+}
+
+func TestSafeWorkspaceNextStaysOnLayouts(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/workspace", nil)
+	request.Host = "example.test"
+	if got := safeWorkspaceNext("/layouts", request); got != "/layouts" {
+		t.Fatalf("got %q", got)
+	}
+	if got := safeWorkspaceNext("/offline", request); got != "/" {
+		t.Fatalf("offline next should go home, got %q", got)
+	}
+	if got := safeWorkspaceNext("https://evil.test/layouts", request); got != "/" {
+		t.Fatalf("external next %q", got)
 	}
 }
 
@@ -138,6 +149,22 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 	if !hasWorkspaceCookie(jar, server.URL, "offline") {
 		t.Fatal("workspace cookie was not set to offline")
+	}
+
+	response, err = client.Get(server.URL + "/layouts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	layoutsBody, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /layouts status %d", response.StatusCode)
+	}
+	if !strings.Contains(string(layoutsBody), "workspace-online") {
+		t.Fatal("live layouts page should render the full online workspace")
+	}
+	if strings.Contains(string(layoutsBody), "Sem conexão com o emenysFlow. Monte a planta neste aparelho.") {
+		t.Fatal("live layouts page should not use the offline-only copy")
 	}
 }
 

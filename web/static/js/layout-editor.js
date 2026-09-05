@@ -1,16 +1,15 @@
 const WAITER_COLORS = [
-  "#f5f5f5", "#d4d4d4", "#b0b0b0", "#8a8a8a", "#636363",
-  "#3f3f3f", "#e8e8e8", "#9c9c9c", "#6e6e6e", "#2a2a2a",
-  "#c8c8c8", "#7c7c7c", "#4a4a4a", "#1a1a1a", "#aeaeae",
+  "#7ec8ff", "#ff8fab", "#7dffb3", "#ffd166", "#c084fc",
+  "#fb923c", "#67e8f9", "#f472b6", "#86efac", "#facc15",
+  "#818cf8", "#fb7185", "#2dd4bf", "#e879f9", "#94a3b8",
 ];
+const SHADOW_WAITER_COLOR = "#e7d7a7";
 
 const LAYOUT_PALETTE = [
-  "#ffffff", "#f2f2f2", "#e6e6e6", "#d9d9d9", "#cccccc",
-  "#bfbfbf", "#b3b3b3", "#a6a6a6", "#999999", "#8c8c8c",
-  "#808080", "#737373", "#666666", "#595959", "#4d4d4d",
-  "#404040", "#333333", "#262626", "#1a1a1a", "#0d0d0d",
-  "#ececec", "#cfcfcf", "#b8b8b8", "#9f9f9f", "#878787",
-  "#6f6f6f", "#575757", "#3e3e3e", "#2c2c2c", "#161616",
+  "#7ec8ff", "#ff8fab", "#7dffb3", "#ffd166", "#c084fc",
+  "#fb923c", "#67e8f9", "#f472b6", "#86efac", "#facc15",
+  "#818cf8", "#fb7185", "#2dd4bf", "#e879f9", "#ffffff",
+  "#f2f2f2", "#d9d9d9", "#a6a6a6", "#737373", "#404040",
 ];
 
 const LAYOUT_THEME = {
@@ -43,29 +42,14 @@ const TABLE_ROUND_SIZE = TABLE_SIZES.medium.table_round.width;
 const TABLE_RECT_WIDTH = TABLE_SIZES.medium.table_rect.width;
 const TABLE_RECT_HEIGHT = TABLE_SIZES.medium.table_rect.height;
 const TABLE_ROW_GAP = GRID_SIZE;
-const MIN_VIEW_SCALE = 0.45;
-const MAX_VIEW_SCALE = 4;
 const WORLD_MIN = -6000;
 const WORLD_MAX = 12000;
 
-function touchDistance(touches) {
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
-  return Math.hypot(dx, dy);
-}
-
-function touchCenter(touches) {
-  return {
-    x: (touches[0].clientX + touches[1].clientX) / 2,
-    y: (touches[0].clientY + touches[1].clientY) / 2,
-  };
-}
-
-function layoutColorForWaiter(name, registry) {
+function layoutColorForWaiter(name, registry, options = {}) {
   const key = (name || "").trim().toLowerCase();
   if (!key) return "#9a9a9a";
   if (registry.has(key)) return registry.get(key);
-  const color = WAITER_COLORS[registry.size % WAITER_COLORS.length];
+  const color = options.shadow ? SHADOW_WAITER_COLOR : WAITER_COLORS[registry.size % WAITER_COLORS.length];
   registry.set(key, color);
   return color;
 }
@@ -711,8 +695,12 @@ function initializeLayoutEditor(root = document) {
     if (!configuredWaiters.length && waiterCountInput) {
       configuredWaiters = Array.from({ length: Number(waiterCountInput.value) || 0 }, (_, index) => `Garçom ${index + 1}`);
     }
+  } else if (!configuredWaiters.length) {
+    const eventWaiters = Math.max(0, Number(editor.dataset.waiterCount) || 0);
+    configuredWaiters = Array.from({ length: eventWaiters }, (_, index) => `Garçom ${index + 1}`);
   }
   state.waiters = [...configuredWaiters];
+  let includeCoLeader = false;
 
   let selectedId = null;
   let activeTool = "select";
@@ -723,15 +711,54 @@ function initializeLayoutEditor(root = document) {
   let rowDragState = null;
   let fullscreenActive = false;
   let view = { x: 0, y: 0, scale: 1 };
-  let pinchState = null;
   let panState = null;
   let draftReady = false;
   let draftTimer = null;
   const waiterRegistry = new Map();
-  configuredWaiters.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
-  state.elements.forEach((item) => {
-    if (item.waiter) layoutColorForWaiter(item.waiter, waiterRegistry);
-  });
+  function registerWaiterColors() {
+    const shadow = shadowWaiterName();
+    configuredWaiters.forEach((name) => layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow }));
+    state.elements.forEach((item) => {
+      if (item.waiter) layoutColorForWaiter(item.waiter, waiterRegistry, { shadow: item.waiter === shadow });
+    });
+  }
+
+  function shadowWaiterName() {
+    const names = configuredWaiters.filter(Boolean);
+    return names.length ? names[names.length - 1] : "";
+  }
+
+  function staffCounts() {
+    return {
+      waiters: configuredWaiters.filter(Boolean).length || Number(editor.dataset.waiterCount) || 0,
+      coordinators: Number(editor.dataset.coordinatorCount) || 0,
+      leaders: Number(editor.dataset.leaderCount) || 0,
+      coleaders: Number(editor.dataset.coleaderCount) || 0,
+    };
+  }
+
+  function currentDivision() {
+    const suggest = window.emenysSuggestFloorWaiterDivision;
+    if (!suggest) return null;
+    const staff = staffCounts();
+    return suggest({
+      tables: tableCount(state.elements),
+      waiters: staff.waiters,
+      coordinators: staff.coordinators,
+      leaders: staff.leaders,
+      coleaders: staff.coleaders,
+      includeCoLeader,
+    });
+  }
+
+  function servingNamesForDivision(plan) {
+    const waiters = configuredWaiters.filter(Boolean);
+    const serving = waiters.slice(0, Math.max(0, waiters.length - (plan?.shadowWaiters || 0)));
+    const coleaders = window.emenysColeaderNames?.(plan?.usedCoLeaders || 0) || [];
+    return [...serving, ...coleaders];
+  }
+
+  registerWaiterColors();
 
   function isMobileLayout() {
     return MOBILE_LAYOUT_QUERY.matches;
@@ -819,58 +846,14 @@ function initializeLayoutEditor(root = document) {
   }
 
   function fitInitialView() {
-    syncViewportSize();
-    const rect = viewport?.getBoundingClientRect();
-    if (!rect?.width || !rect?.height) {
-      updateViewBox();
-      return;
-    }
-
-    const margin = 1.12;
-    const emptyScale = 2;
-
-    if (!state.elements.length) {
-      view.scale = emptyScale;
-      const viewWidth = state.width / view.scale;
-      const viewHeight = state.height / view.scale;
-      view.x = state.width / 2 - viewWidth / 2;
-      view.y = state.height / 2 - viewHeight / 2;
-      updateViewBox();
-      return;
-    }
-
-    const bounds = contentBounds(80);
-    const fitScale = Math.min(
-      state.width / (bounds.width * margin),
-      state.height / (bounds.height * margin),
-    );
-    view.scale = Math.min(MAX_VIEW_SCALE, Math.max(0.15, fitScale));
-    const viewWidth = state.width / view.scale;
-    const viewHeight = state.height / view.scale;
-    const centerX = bounds.x + bounds.width / 2;
-    const centerY = bounds.y + bounds.height / 2;
-    view.x = centerX - viewWidth / 2;
-    view.y = centerY - viewHeight / 2;
+    view.x = 0;
+    view.y = 0;
+    view.scale = 1;
     updateViewBox();
   }
 
   function resetView() {
     fitInitialView();
-  }
-
-  function zoomBy(factor, clientX, clientY) {
-    const anchor = Number.isFinite(clientX) ? svgPoint(svg, clientX, clientY) : { x: state.width / 2, y: state.height / 2 };
-    const nextScale = Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, view.scale * factor));
-    if (nextScale === view.scale) return;
-    const widthBefore = state.width / view.scale;
-    const heightBefore = state.height / view.scale;
-    view.scale = nextScale;
-    const widthAfter = state.width / view.scale;
-    const heightAfter = state.height / view.scale;
-    view.x += (anchor.x - view.x) * (1 - widthAfter / widthBefore);
-    view.y += (anchor.y - view.y) * (1 - heightAfter / heightBefore);
-    clampView();
-    updateViewBox();
   }
 
   function clearPlacementHint() {
@@ -898,10 +881,7 @@ function initializeLayoutEditor(root = document) {
     placementHint.classList.add("is-interactive");
     placementHint.replaceChildren();
     const text = document.createElement("p");
-/*
     text.className = "layout-placement-text";
-*/
-    text.idName =
     text.textContent = "Arraste a fileira para posicionar. Toque em Confirmar quando estiver no lugar certo.";
     const actions = document.createElement("div");
     actions.className = "layout-placement-actions";
@@ -1050,11 +1030,12 @@ function initializeLayoutEditor(root = document) {
 
   function applyConfiguredWaiters() {
     state.waiters = configuredWaiters.filter(Boolean);
-    configuredWaiters.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
+    registerWaiterColors();
     refreshWaiterSelect();
     syncStandaloneHiddenFields();
     if (statConfiguredWaiters) statConfiguredWaiters.textContent = String(configuredWaiters.filter(Boolean).length);
     updateLegend();
+    refreshDivisionPanel();
   }
 
   function syncConfiguredWaiters(options = {}) {
@@ -1075,15 +1056,21 @@ function initializeLayoutEditor(root = document) {
   function renderWaiterNameGrid() {
     if (!waiterNameGrid) return;
     waiterNameGrid.replaceChildren();
+    const shadow = shadowWaiterName();
     configuredWaiters.forEach((name, index) => {
       const label = document.createElement("label");
-      label.textContent = `Garçom ${index + 1}`;
+      const title = document.createElement("span");
+      title.className = "layout-waiter-name-title";
+      const swatch = document.createElement("span");
+      swatch.className = "layout-legend-swatch";
+      swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
+      title.append(swatch, document.createTextNode(name === shadow ? `Garçom ${index + 1} · sombra` : `Garçom ${index + 1}`));
       const input = document.createElement("input");
       input.type = "text";
       input.value = name;
-      input.placeholder = `Nome do garçom ${index + 1}`;
+      input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
       bindWaiterNameInput(input, index);
-      label.append(input);
+      label.append(title, input);
       waiterNameGrid.append(label);
     });
   }
@@ -1156,21 +1143,124 @@ function initializeLayoutEditor(root = document) {
     if (statTables) statTables.textContent = String(tableCount(state.elements));
     if (statWaiters) statWaiters.textContent = String(waiterNamesFromElements(state.elements).length);
     if (statGuests && metaForm) statGuests.textContent = metaForm.querySelector('[name="guest_count"]')?.value || "0";
+    refreshDivisionPanel();
   }
 
   function updateLegend() {
     if (!legendList) return;
     legendList.replaceChildren();
-    const names = sortWaiterNames([...new Set([...configuredWaiters, ...waiterNamesFromElements(state.elements)])].filter(Boolean));
+    const shadow = shadowWaiterName();
+    const names = sortWaiterNames([...new Set([...configuredWaiters, ...servingNamesForDivision(currentDivision()), ...waiterNamesFromElements(state.elements)])].filter(Boolean));
     names.forEach((name) => {
       const li = document.createElement("li");
       const swatch = document.createElement("span");
       swatch.className = "layout-legend-swatch";
-      swatch.style.background = layoutColorForWaiter(name, waiterRegistry);
+      swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
       const label = document.createElement("span");
-      label.textContent = name;
+      label.textContent = name === shadow ? `${name} · sombra dos noivos` : name;
       li.append(swatch, label);
       legendList.append(li);
+    });
+  }
+
+  function formatTablesPerPerson(value) {
+    if (!Number.isFinite(value) || value <= 0) return "—";
+    return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(".", ",");
+  }
+
+  function refreshDivisionPanel(root = editor) {
+    const plan = currentDivision();
+    if (!plan) return;
+    root.querySelectorAll("[data-layout-division-summary]").forEach((node) => {
+      const parts = [
+        `${plan.tableCount} ${plan.tableCount === 1 ? "mesa" : "mesas"}`,
+        plan.shadowWaiters ? "1 sombra dos noivos" : null,
+        "coordenação e líder sem mesa",
+      ].filter(Boolean);
+      if (plan.servingPeople > 0) {
+        parts.push(`${formatTablesPerPerson(plan.tablesPerPerson)} mesas por pessoa na pista`);
+      } else if (plan.tableCount > 0) {
+        parts.push("ninguém na pista até incluir o colíder ou mais garçons");
+      }
+      node.textContent = parts.join(" · ");
+    });
+    root.querySelectorAll("[data-layout-division-coleader-row]").forEach((row) => {
+      row.hidden = !plan.offerCoLeader;
+    });
+    root.querySelectorAll("[data-layout-include-coleader]").forEach((input) => {
+      input.checked = includeCoLeader && plan.offerCoLeader;
+    });
+    root.querySelectorAll("[data-layout-division-shares]").forEach((list) => {
+      list.replaceChildren();
+      const names = servingNamesForDivision(plan);
+      names.forEach((name, index) => {
+        const item = document.createElement("li");
+        const swatch = document.createElement("span");
+        swatch.className = "layout-legend-swatch";
+        swatch.style.background = layoutColorForWaiter(name, waiterRegistry);
+        const label = document.createElement("span");
+        const tables = plan.shares[index] || 0;
+        label.textContent = `${name} · ${tables} ${tables === 1 ? "mesa" : "mesas"}`;
+        item.append(swatch, label);
+        list.append(item);
+      });
+      if (plan.shadowWaiters) {
+        const shadow = shadowWaiterName();
+        if (shadow) {
+          const item = document.createElement("li");
+          const swatch = document.createElement("span");
+          swatch.className = "layout-legend-swatch";
+          swatch.style.background = layoutColorForWaiter(shadow, waiterRegistry, { shadow: true });
+          const label = document.createElement("span");
+          label.textContent = `${shadow} · sombra dos noivos`;
+          item.append(swatch, label);
+          list.append(item);
+        }
+      }
+    });
+  }
+
+  function applySuggestedDivision() {
+    const plan = currentDivision();
+    if (!plan) return;
+    const names = servingNamesForDivision(plan);
+    if (!names.length) {
+      window.alert("Não há quem assuma mesa. Inclua o colíder ou cadastre mais garçons.");
+      return;
+    }
+    names.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
+    const tables = state.elements
+      .filter((item) => item.type === "table_round" || item.type === "table_rect")
+      .sort((left, right) => left.y - right.y || left.x - right.x);
+    let offset = 0;
+    names.forEach((name, index) => {
+      const count = plan.shares[index] || 0;
+      tables.slice(offset, offset + count).forEach((item) => {
+        item.waiter = name;
+        item.color = "";
+      });
+      offset += count;
+    });
+    if (plan.usedCoLeaders) {
+      state.waiters = [...new Set([...configuredWaiters.filter(Boolean), ...names])];
+    }
+    render();
+    persistHiddenInput();
+  }
+
+  function bindDivisionControls(root = editor) {
+    root.querySelectorAll("[data-layout-include-coleader]").forEach((input) => {
+      input.addEventListener("change", () => {
+        includeCoLeader = input.checked;
+        refreshDivisionPanel();
+        if (root !== editor) refreshDivisionPanel(root);
+        updateLegend();
+      });
+    });
+    root.querySelectorAll("[data-layout-apply-division]").forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", applySuggestedDivision);
     });
   }
 
@@ -1872,17 +1962,29 @@ function initializeLayoutEditor(root = document) {
     if (editButton) editButton.hidden = true;
     if (grid) {
       grid.replaceChildren();
+      const shadow = shadowWaiterName();
       configuredWaiters.forEach((name, index) => {
         const label = document.createElement("label");
-        label.textContent = `Garçom ${index + 1}`;
+        const title = document.createElement("span");
+        title.className = "layout-waiter-name-title";
+        const swatch = document.createElement("span");
+        swatch.className = "layout-legend-swatch";
+        swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
+        title.append(swatch, document.createTextNode(name === shadow ? `Garçom ${index + 1} · sombra` : `Garçom ${index + 1}`));
         const input = document.createElement("input");
         input.type = "text";
         input.value = name;
-        input.placeholder = `Nome do garçom ${index + 1}`;
+        input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
         bindWaiterNameInput(input, index);
-        label.append(input);
+        label.append(title, input);
         grid.append(label);
       });
+      const divisionClone = editor.querySelector("[data-layout-division]")?.cloneNode(true);
+      if (divisionClone) {
+        bindDivisionControls(divisionClone);
+        refreshDivisionPanel(divisionClone);
+        floatSheetBody.append(divisionClone);
+      }
     }
     const done = document.createElement("button");
     done.type = "button";
@@ -1892,9 +1994,36 @@ function initializeLayoutEditor(root = document) {
     floatSheetBody.append(done);
   }
 
+  function openDivisionSheet() {
+    if (!floatSheet || !floatSheetBody) return;
+    floatSheet.hidden = false;
+    floatSheet.dataset.open = "division";
+    document.body.classList.add("layout-sheet-open");
+    if (floatSheetTitle) floatSheetTitle.textContent = "Divisão de garçons";
+    floatSheetBody.replaceChildren();
+    const panel = editor.querySelector("[data-layout-division]")?.cloneNode(true);
+    if (panel) {
+      panel.classList.remove("layout-desktop-stats");
+      bindDivisionControls(panel);
+      refreshDivisionPanel(panel);
+      floatSheetBody.append(panel);
+    }
+    const apply = floatSheetBody.querySelector("[data-layout-apply-division]");
+    if (apply) {
+      apply.addEventListener("click", () => {
+        applySuggestedDivision();
+        closeSheet();
+      });
+    }
+  }
+
   function openSheet(kind) {
     if (kind === "setup") {
       openSetupSheet();
+      return;
+    }
+    if (kind === "division") {
+      openDivisionSheet();
       return;
     }
     if (kind === "row") {
@@ -1952,6 +2081,12 @@ function initializeLayoutEditor(root = document) {
       setup.addEventListener("click", () => openSheet("setup"));
       menu.append(setup);
     }
+    const division = document.createElement("button");
+    division.type = "button";
+    division.className = "button secondary full";
+    division.textContent = "Divisão de garçons";
+    division.addEventListener("click", () => openSheet("division"));
+    menu.append(division);
     [
       ["row", "Adicionar fileira de mesas"],
       ["duplicate", "Duplicar selecionado"],
@@ -2157,50 +2292,11 @@ function initializeLayoutEditor(root = document) {
     panState = null;
   });
 
-  viewport?.addEventListener("wheel", (event) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    zoomBy(event.deltaY < 0 ? 1.08 : 0.92, event.clientX, event.clientY);
-  }, { passive: false });
-
   viewport?.addEventListener("touchstart", (event) => {
-    if (event.touches.length === 2) {
-      pinchState = {
-        distance: touchDistance(event.touches),
-        scale: view.scale,
-        center: touchCenter(event.touches),
-        viewX: view.x,
-        viewY: view.y,
-        lastDistance: touchDistance(event.touches),
-      };
-      panState = null;
-    }
-  }, { passive: true });
-
-  viewport?.addEventListener("touchmove", (event) => {
-    if (event.touches.length !== 2 || !pinchState) return;
-    event.preventDefault();
-    const distance = touchDistance(event.touches);
-    const center = touchCenter(event.touches);
-    const factor = distance / pinchState.lastDistance;
-    pinchState.lastDistance = distance;
-    if (Math.abs(factor - 1) > 0.004) zoomBy(factor, center.x, center.y);
+    if (event.touches.length === 2) event.preventDefault();
   }, { passive: false });
 
-  viewport?.addEventListener("touchend", () => {
-    if (pinchState) pinchState = null;
-  });
-
-  editor.querySelectorAll("[data-layout-zoom]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const rect = viewport?.getBoundingClientRect();
-      const centerX = rect ? rect.left + rect.width / 2 : undefined;
-      const centerY = rect ? rect.top + rect.height / 2 : undefined;
-      if (button.dataset.layoutZoom === "in") zoomBy(1.2, centerX, centerY);
-      if (button.dataset.layoutZoom === "out") zoomBy(1 / 1.2, centerX, centerY);
-      if (button.dataset.layoutZoom === "reset") resetView();
-    });
-  });
+  bindDivisionControls(editor);
 
   document.addEventListener("keydown", (event) => {
     if (!editor.isConnected) return;

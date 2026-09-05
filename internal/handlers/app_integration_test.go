@@ -102,7 +102,8 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/manifest.webmanifest":          "emenysFlow",
 		"/static/offline.html":           "Conexão restabelecida",
 		"/static/js/offline.js":          "/api/health",
-		"/sw.js":                         `CACHE_VERSION = "v29"`,
+		"/static/js/layout-division.js":  "suggestFloorWaiterDivision",
+		"/sw.js":                         `CACHE_VERSION = "v30"`,
 		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}

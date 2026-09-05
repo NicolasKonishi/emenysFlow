@@ -1,7 +1,7 @@
 {{define "layout_editor"}}
 <div class="layout-planner layout-theme{{if eq .LayoutMode "standalone"}} layout-planner-standalone{{end}}" data-layout-editor
   data-layout-mode="{{.LayoutMode}}"
-  {{if eq .LayoutMode "event"}}data-event-id="{{.Event.ID}}" data-guest-count="{{.Event.GuestCount}}" data-waiter-count="{{.StaffSummary.Waiters}}" data-export-title="{{.Event.ClientName}}"{{else}}data-layout-id="{{.StandaloneLayout.ID}}" data-guest-count="{{.StandaloneLayout.GuestCount}}" data-waiter-count="{{.StandaloneLayout.WaiterCount}}" data-export-title="{{.StandaloneLayout.Name}}" data-waiter-names='{{.StandaloneLayout.WaiterNamesJSON}}'{{if not .IsEdit}} data-layout-new="1"{{end}}{{end}}>
+  {{if eq .LayoutMode "event"}}data-event-id="{{.Event.ID}}" data-guest-count="{{.Event.GuestCount}}" data-waiter-count="{{.StaffSummary.Waiters}}" data-coordinator-count="{{.StaffSummary.Coordinators}}" data-leader-count="{{.StaffSummary.Leaders}}" data-coleader-count="{{.StaffSummary.CoLeaders}}" data-export-title="{{.Event.ClientName}}"{{else}}data-layout-id="{{.StandaloneLayout.ID}}" data-guest-count="{{.StandaloneLayout.GuestCount}}" data-waiter-count="{{.StandaloneLayout.WaiterCount}}" data-coordinator-count="1" data-leader-count="1" data-coleader-count="1" data-export-title="{{.StandaloneLayout.Name}}" data-waiter-names='{{.StandaloneLayout.WaiterNamesJSON}}'{{if not .IsEdit}} data-layout-new="1"{{end}}{{end}}>
 
   <div class="layout-float-top" data-layout-float-top hidden>
     <button class="layout-float-btn" type="button" data-layout-fullscreen-exit aria-label="Sair da tela cheia">{{icon "back"}}</button>
@@ -53,6 +53,20 @@
     <div><span>Garçons atribuídos</span><strong data-layout-stat="waiters">0</strong></div>
   </div>
 
+  <section class="panel layout-division layout-desktop-stats" data-layout-division>
+    <div>
+      <span class="eyebrow">Divisão de mesas</span>
+      <h2>Sugestão da equipe</h2>
+      <p data-layout-division-summary>Coordenação e líder não pegam mesa. Um garçom fica de sombra dos noivos.</p>
+    </div>
+    <label class="check-label" data-layout-division-coleader-row hidden>
+      <input type="checkbox" data-layout-include-coleader>
+      <span>Incluir colíder na divisão</span>
+    </label>
+    <ul class="layout-division-shares" data-layout-division-shares></ul>
+    <button type="button" class="button primary" data-layout-apply-division>Aplicar sugestão</button>
+  </section>
+
   <div class="layout-stage" data-layout-stage>
     <div class="layout-planner-workspace">
       <aside class="panel layout-toolbar layout-desktop-toolbar" aria-label="Ferramentas do layout">
@@ -92,17 +106,11 @@
             <button class="button primary full" type="submit">Preparar fileira</button>
           </form>
         </div>
-        <p class="layout-toolbar-hint">Pinça para zoom. Arraste para mover. Use Fileira para várias mesas de uma vez.</p>
+        <p class="layout-toolbar-hint">Arraste as mesas para posicionar. Use Fileira para várias mesas de uma vez.</p>
       </aside>
 
       <section class="panel layout-canvas-shell">
         <div class="layout-canvas-viewport" data-layout-viewport>
-          <div class="layout-zoom-controls" data-layout-zoom-controls>
-            <button class="layout-zoom-btn" type="button" data-layout-zoom="out" aria-label="Diminuir zoom">{{icon "zoom-out"}}</button>
-            <span data-layout-zoom-label>100%</span>
-            <button class="layout-zoom-btn" type="button" data-layout-zoom="in" aria-label="Aumentar zoom">{{icon "zoom-in"}}</button>
-            <button class="layout-zoom-btn" type="button" data-layout-zoom="reset" aria-label="Resetar zoom">{{icon "zoom-reset"}}</button>
-          </div>
           <svg class="layout-canvas" data-layout-canvas viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas do layout">
             <defs>
               <linearGradient id="layout-glass-fill" x1="0" y1="0" x2="0" y2="1">

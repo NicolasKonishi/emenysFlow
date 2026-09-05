@@ -1,13 +1,14 @@
-const CACHE_VERSION = "v29";
+const CACHE_VERSION = "v30";
 const SHELL_CACHE = `buffetflow-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `buffetflow-data-${CACHE_VERSION}`;
 const SHELL = [
   "/static/offline.html",
-  "/static/css/app.css?v=53",
+  "/static/css/app.css?v=54",
   "/static/js/icons.js?v=2",
   "/static/js/app.js?v=15",
   "/static/js/offline.js?v=14",
-  "/static/js/layout-editor.js?v=34",
+  "/static/js/layout-division.js?v=1",
+  "/static/js/layout-editor.js?v=35",
   "/static/icons/icon-192.png?v=3",
   "/static/icons/icon-512.png?v=3",
   "/static/icons/icon-512-maskable.png?v=3",

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v28";
+const CACHE_VERSION = "v29";
 const SHELL_CACHE = `buffetflow-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `buffetflow-data-${CACHE_VERSION}`;
 const SHELL = [
@@ -8,7 +8,10 @@ const SHELL = [
   "/static/js/app.js?v=15",
   "/static/js/offline.js?v=14",
   "/static/js/layout-editor.js?v=34",
-  "/static/icons/icon-512.png",
+  "/static/icons/icon-192.png?v=3",
+  "/static/icons/icon-512.png?v=3",
+  "/static/icons/icon-512-maskable.png?v=3",
+  "/static/icons/apple-touch-icon.png?v=3",
   "/static/icons/emenys-mark.png",
   "/static/icons/emenys-mark-ink.png",
   "/manifest.webmanifest"

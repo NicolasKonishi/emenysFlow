@@ -1,12 +1,12 @@
 const WAITER_COLORS = [
-  "#1d4ed8", "#dc2626", "#eab308", "#16a34a",
+  "#1d4ed8", "#dc2626", "#f5d000", "#16a34a",
   "#ea580c", "#7c3aed", "#0891b2", "#db2777",
   "#65a30d", "#b45309", "#c026d3", "#0f766e",
 ];
-const SHADOW_WAITER_COLOR = "#c9a227";
+const SHADOW_WAITER_COLOR = "#7a5410";
 
 const LAYOUT_PALETTE = [
-  "#1d4ed8", "#dc2626", "#eab308", "#16a34a",
+  "#1d4ed8", "#dc2626", "#f5d000", "#16a34a",
   "#ea580c", "#7c3aed", "#0891b2", "#db2777",
   "#65a30d", "#b45309", "#c026d3", "#0f766e",
   "#ffffff", "#f2f2f2", "#d9d9d9", "#a6a6a6", "#737373", "#404040",

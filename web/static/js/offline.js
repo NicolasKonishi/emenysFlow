@@ -598,23 +598,35 @@
     return "";
   }
 
+  const icon = (name) => (window.emenysIcon ? window.emenysIcon(name) : "");
+
+  function fillDataIcons() {
+    document.querySelectorAll("[data-icon]").forEach((node) => {
+      node.innerHTML = icon(node.dataset.icon);
+    });
+  }
+
+  function emptyState(title, copy) {
+    return `<div class="empty-state panel">${icon("events")}<strong>${title}</strong><p>${copy}</p></div>`;
+  }
+
   async function renderOfflineHome() {
     const root = document.querySelector("[data-offline-home]");
     if (!root) return;
     const saved = await getRecord("meta", "bootstrap").catch(() => null);
     if (!saved?.value) {
-      root.innerHTML = "<div class=\"empty-state panel\"><strong>Nenhum evento foi salvo neste aparelho.</strong><p>Entre no modo online, abra as checklists e use “Salvar eventos neste aparelho”.</p></div>";
+      root.innerHTML = emptyState("Nenhum evento foi salvo neste aparelho.", "Entre no modo online, abra as checklists e use “Salvar eventos neste aparelho”.");
       return;
     }
     const expiration = new Date(saved.value.offline_access_expires_at || 0);
     if (expiration < new Date()) {
-      root.innerHTML = "<div class=\"empty-state panel\"><strong>O acesso offline expirou.</strong><p>Conecte-se novamente para validar sua sessão e baixar os eventos.</p></div>";
+      root.innerHTML = emptyState("O acesso offline expirou.", "Conecte-se novamente para validar sua sessão e baixar os eventos.");
       return;
     }
     root.replaceChildren();
     const events = saved.value.events || [];
     if (!events.length) {
-      root.innerHTML = "<div class=\"empty-state panel\"><strong>Nenhum evento disponível offline.</strong><p>Cadastre um evento no modo online e salve-o neste aparelho.</p></div>";
+      root.innerHTML = emptyState("Nenhum evento disponível offline.", "Cadastre um evento no modo online e salve-o neste aparelho.");
       return;
     }
     events.forEach((bundle) => {
@@ -627,7 +639,7 @@
       const items = bundle.checklist?.items || bundle.checklist?.Items || [];
       const card = document.createElement("article");
       card.className = "panel offline-event-card";
-      card.innerHTML = `<header><div><h2></h2><p></p></div></header><p></p><div class="offline-event-actions"><a class="button primary" href="/events/${id}/operation">Abrir checklist</a><a class="button secondary" href="/events/${id}/layout">Organizar layout</a></div>`;
+      card.innerHTML = `<header><span class="offline-card-icon">${icon("events")}</span><div><h2></h2><p></p></div></header><p></p><div class="offline-event-actions"><a class="button primary" href="/events/${id}/operation">${icon("checklists")} Abrir checklist</a><a class="button secondary" href="/events/${id}/layout">${icon("layouts")} Organizar layout</a></div>`;
       card.querySelector("h2").textContent = name;
       card.querySelector("header p").textContent = [client, venue, guests ? `${guests} pessoas` : ""].filter(Boolean).join(" · ");
       card.querySelector("header + p").textContent = `${items.length} itens na checklist salva`;
@@ -637,7 +649,7 @@
     if (layouts.length) {
       const block = document.createElement("section");
       block.className = "panel offline-layout-panel";
-      block.innerHTML = "<div class=\"panel-heading\"><div><span class=\"eyebrow\">Organizador de layout</span><h2>Plantas salvas neste aparelho</h2></div></div><div data-layout-list></div>";
+      block.innerHTML = `<div class="panel-heading"><div><span class="eyebrow">Organizador de layout</span><h2>Plantas salvas neste aparelho</h2></div></div><div data-layout-list></div>`;
       const list = block.querySelector("[data-layout-list]");
       layouts.forEach((layout) => {
         const id = eventField(layout, "id", "ID");
@@ -645,7 +657,7 @@
         const link = document.createElement("a");
         link.className = "text-link";
         link.href = `/layouts/${id}`;
-        link.innerHTML = `${eventField(layout, "name", "Name") || "Layout"} ${window.emenysIcon ? window.emenysIcon("arrow") : ""}`;
+        link.innerHTML = `${eventField(layout, "name", "Name") || "Layout"} ${icon("arrow")}`;
         row.append(link);
         list.append(row);
       });
@@ -744,6 +756,7 @@
       registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
       registration?.update().catch(() => null);
     }
+    fillDataIcons();
     bindSyncPreference();
     await updateStatus();
     await renderConflicts();

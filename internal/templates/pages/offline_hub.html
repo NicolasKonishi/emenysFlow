@@ -1,10 +1,13 @@
 {{define "content"}}
 <div class="page-wrap offline-hub" data-offline-hub>
   <header class="page-header">
-    <div>
-      <span class="eyebrow">Modo offline</span>
-      <h1>Checklists e layout das festas</h1>
-      <p>Sem conexão com o emenysFlow. Use as checklists e o layout salvos neste aparelho. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
+    <div class="page-brand">
+      <span class="brand-mark large">{{icon "mark"}}</span>
+      <div>
+        <span class="eyebrow">Modo offline</span>
+        <h1>Checklists e layout das festas</h1>
+        <p>Sem conexão com o emenysFlow. Use as checklists e o layout salvos neste aparelho. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
+      </div>
     </div>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}

@@ -7,11 +7,22 @@
   <title>emenysFlow · Modo offline</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon-512.png" type="image/png">
-  <link rel="stylesheet" href="/static/css/app.css?v=51">
-  <script defer src="/static/js/icons.js?v=1"></script>
-  <script defer src="/static/js/offline.js?v=12"></script>
+  <link rel="apple-touch-icon" href="/static/icons/icon-512.png">
+  <link rel="stylesheet" href="/static/css/app.css?v=52">
+  <script defer src="/static/js/icons.js?v=2"></script>
+  <script defer src="/static/js/offline.js?v=13"></script>
 </head>
 <body class="offline-shell workspace-offline" data-workspace="offline">
+  <header class="offline-topbar">
+    <a class="brand" href="/offline" aria-label="emenysFlow, modo offline">
+      <span class="brand-mark"><img src="/static/icons/emenys-mark-ink.png" alt="" width="24" height="26"></span>
+      <span><strong>emenysFlow</strong><small>Modo offline</small></span>
+    </a>
+    <nav class="offline-top-links" aria-label="Navegação offline">
+      <a href="/offline">Checklists</a>
+      <a href="/layouts">Layouts</a>
+    </nav>
+  </header>
   <aside class="reconnect-banner" data-reconnect-banner hidden>
     <div>
       <strong>Conexão restabelecida</strong>
@@ -23,11 +34,14 @@
     </div>
   </aside>
   <main class="offline-page">
-    <header>
-      <span class="brand-mark"><img src="/static/icons/emenys-mark-ink.png" alt="" width="24" height="26"></span>
-      <div>
-        <span class="eyebrow">Modo offline</span>
-        <h1>Checklists e layout neste aparelho</h1>
+    <header class="page-header">
+      <div class="page-brand">
+        <span class="brand-mark large"><img src="/static/icons/emenys-mark-ink.png" alt="" width="40" height="44"></span>
+        <div>
+          <span class="eyebrow">Modo offline</span>
+          <h1>Checklists e layout neste aparelho</h1>
+          <p>Sem conexão com o emenysFlow. Use as checklists e os layouts salvos. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
+        </div>
       </div>
     </header>
     <div class="alert info">Sem conexão com o emenysFlow. Use as checklists e os layouts salvos. Quando o serviço voltar, você escolhe se abre o sistema completo.</div>
@@ -40,7 +54,12 @@
       <label class="sync-switch"><input type="checkbox" data-sync-enabled><span>Sincronizar com o online</span></label>
       <p class="sync-preference-status" data-sync-preference-status>A sincronização automática está desligada.</p>
     </section>
-    <section data-offline-home><p>Carregando dados locais…</p></section>
+    <section class="offline-event-grid" data-offline-home><p>Carregando dados locais…</p></section>
   </main>
+  <nav class="mobile-nav mobile-nav-offline workspace-chooser-nav" aria-label="Navegação móvel">
+    <a href="/offline" aria-current="page"><span class="nav-icon" data-icon="checklists"></span>Checklists</a>
+    <a class="mobile-create" href="/layouts/new" aria-label="Novo layout"><span class="nav-icon" data-icon="plus"></span></a>
+    <a href="/layouts"><span class="nav-icon" data-icon="layouts"></span>Layouts</a>
+  </nav>
 </body>
 </html>

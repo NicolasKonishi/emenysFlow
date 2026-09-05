@@ -26,7 +26,7 @@ func (a *App) operationPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data := a.baseData(r, operationTitle(stage), "events")
+	data := a.baseData(r, operationTitle(stage), "offline")
 	data.Event = event
 	data.Operation, err = a.store.GetEventOperation(r.Context(), eventID, stage)
 	if err != nil {

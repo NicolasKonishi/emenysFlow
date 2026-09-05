@@ -9,28 +9,48 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icons/icon.svg">
-  <link rel="stylesheet" href="/static/css/app.css?v=43">
+  <link rel="stylesheet" href="/static/css/app.css?v=44">
   <script defer src="/static/js/app.js?v=14"></script>
   <script defer src="/static/js/layout-editor.js?v=32"></script>
-  <script defer src="/static/js/offline.js?v=8"></script>
+  <script defer src="/static/js/offline.js?v=9"></script>
 </head>
-<body {{if .User.ID}}class="app-shell"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
+<body {{if .User.ID}}class="app-shell{{if .Workspace}} workspace-{{.Workspace}}{{end}}"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
   {{if .User.ID}}
   <aside class="sidebar" aria-label="Navegação principal">
-    <a class="brand" href="/" aria-label="emenysFlow, página inicial">
+    <a class="brand" href="/" aria-label="emenysFlow, escolher área">
       <span class="brand-mark">EF</span>
-      <span><strong>emenysFlow</strong><small>Operação em ordem</small></span>
+      <span><strong>emenysFlow</strong><small>{{if eq .Workspace "offline"}}Modo offline{{else if eq .Workspace "online"}}Modo online{{else}}Escolher área{{end}}</small></span>
     </a>
+    {{if eq .Workspace "offline"}}
     <nav class="nav-list">
-      <a href="/" {{if eq .CurrentNav "dashboard"}}aria-current="page"{{end}}><span class="nav-icon">⌂</span>Visão geral</a>
-      <a href="/events" {{if eq .CurrentNav "events"}}aria-current="page"{{end}}><span class="nav-icon">◫</span>Eventos</a>
+      <a href="/offline" {{if eq .CurrentNav "offline"}}aria-current="page"{{end}}><span class="nav-icon">☑</span>Checklists</a>
       <a href="/layouts" {{if eq .CurrentNav "layouts"}}aria-current="page"{{end}}><span class="nav-icon">▣</span>Layouts</a>
+    </nav>
+    <div class="workspace-switch">
+      <span class="eyebrow">Área</span>
+      <a class="button ghost small full" href="/">Trocar de área</a>
+      <form action="/workspace" method="post"><input type="hidden" name="workspace" value="online"><button class="button secondary small full" type="submit">Ir para o online</button></form>
+    </div>
+    {{else if eq .Workspace "online"}}
+    <nav class="nav-list">
+      <a href="/online" {{if eq .CurrentNav "dashboard"}}aria-current="page"{{end}}><span class="nav-icon">⌂</span>Visão geral</a>
+      <a href="/events" {{if eq .CurrentNav "events"}}aria-current="page"{{end}}><span class="nav-icon">◫</span>Eventos</a>
       <a href="/models" {{if eq .CurrentNav "models"}}aria-current="page"{{end}}><span class="nav-icon">▦</span>Modelos</a>
       <a href="/catalog" {{if eq .CurrentNav "catalog"}}aria-current="page"{{end}}><span class="nav-icon">☷</span>Cardápios</a>
       <a href="/inventory" {{if eq .CurrentNav "inventory"}}aria-current="page"{{end}}><span class="nav-icon">▤</span>Estoque</a>
       <a href="/rules" {{if eq .CurrentNav "rules"}}aria-current="page"{{end}}><span class="nav-icon">⌁</span>Regras</a>
       {{if ne .User.Role "operational"}}<a href="/settings" {{if eq .CurrentNav "settings"}}aria-current="page"{{end}}><span class="nav-icon">⚙</span>Configurações</a>{{end}}
     </nav>
+    <div class="workspace-switch">
+      <span class="eyebrow">Área</span>
+      <a class="button ghost small full" href="/">Trocar de área</a>
+      <form action="/workspace" method="post"><input type="hidden" name="workspace" value="offline"><button class="button secondary small full" type="submit">Ir para o offline</button></form>
+    </div>
+    {{else}}
+    <nav class="nav-list">
+      <a href="/" aria-current="page"><span class="nav-icon">◎</span>Escolher área</a>
+    </nav>
+    {{end}}
     <div class="sidebar-foot">
       <span class="avatar">{{slice .User.Name 0 1}}</span>
       <span class="user-copy"><strong>{{.User.Name}}</strong><small>{{if eq .User.Role "admin"}}Administrador{{else if eq .User.Role "organizer"}}Organizador{{else}}Funcionário operacional{{end}}</small></span>
@@ -38,12 +58,12 @@
     </div>
   </aside>
   <header class="mobile-header">
-    <a class="brand compact" href="/"><span class="brand-mark">EF</span><strong>emenysFlow</strong></a>
+    <a class="brand compact" href="/"><span class="brand-mark">EF</span><strong>{{if eq .Workspace "offline"}}Offline{{else if eq .Workspace "online"}}Online{{else}}emenysFlow{{end}}</strong></a>
     <span class="avatar">{{slice .User.Name 0 1}}</span>
   </header>
   {{end}}
 
-  {{if .User.ID}}
+  {{if and .User.ID (eq .Workspace "offline")}}
   <section class="sync-status-bar" data-sync-status-bar aria-live="polite" hidden>
     <span class="connection-state" data-connection-state>Verificando conexão…</span>
     <span data-pending-count>0 operações pendentes</span>
@@ -53,18 +73,34 @@
   <aside class="sync-conflicts" data-conflict-panel hidden><header><strong>Conflitos de sincronização</strong><button type="button" data-close-conflicts aria-label="Fechar">×</button></header><div data-conflict-list></div></aside>
   {{end}}
 
-  <main id="app-main" {{if and (not .User.ID) (not .Public)}}class="auth-main"{{end}}>
+  <main id="app-main" {{if and (not .User.ID) (not .Public)}}class="auth-main"{{else if not .Workspace}}class="workspace-main"{{end}}>
     {{template "content" .}}
   </main>
 
   {{if .User.ID}}
-  <nav class="mobile-nav" aria-label="Navegação móvel">
-    <a href="/" {{if eq .CurrentNav "dashboard"}}aria-current="page"{{end}}><span>⌂</span>Início</a>
-    <a href="/events" {{if eq .CurrentNav "events"}}aria-current="page"{{end}}><span>◫</span>Eventos</a>
-    <a class="mobile-create" href="/events/new" aria-label="Novo evento"><span>＋</span></a>
-    <a href="/layouts" {{if eq .CurrentNav "layouts"}}aria-current="page"{{end}}><span>▣</span>Layouts</a>
-    <a href="/inventory" {{if eq .CurrentNav "inventory"}}aria-current="page"{{end}}><span>▤</span>Estoque</a>
-  </nav>
+    {{if eq .Workspace "offline"}}
+    <nav class="mobile-nav" aria-label="Navegação móvel">
+      <a href="/" {{if eq .CurrentNav "workspace"}}aria-current="page"{{end}}><span>◎</span>Áreas</a>
+      <a href="/offline" {{if eq .CurrentNav "offline"}}aria-current="page"{{end}}><span>☑</span>Checklists</a>
+      <a class="mobile-create" href="/layouts/new" aria-label="Novo layout"><span>＋</span></a>
+      <a href="/layouts" {{if eq .CurrentNav "layouts"}}aria-current="page"{{end}}><span>▣</span>Layouts</a>
+      <a href="/online"><span>◉</span>Online</a>
+    </nav>
+    {{else if eq .Workspace "online"}}
+    <nav class="mobile-nav" aria-label="Navegação móvel">
+      <a href="/online" {{if eq .CurrentNav "dashboard"}}aria-current="page"{{end}}><span>⌂</span>Início</a>
+      <a href="/events" {{if eq .CurrentNav "events"}}aria-current="page"{{end}}><span>◫</span>Eventos</a>
+      <a class="mobile-create" href="/events/new" aria-label="Novo evento"><span>＋</span></a>
+      <a href="/inventory" {{if eq .CurrentNav "inventory"}}aria-current="page"{{end}}><span>▤</span>Estoque</a>
+      <a href="/offline"><span>◌</span>Offline</a>
+    </nav>
+    {{else}}
+    <nav class="mobile-nav workspace-chooser-nav" aria-label="Navegação móvel">
+      <a href="/" aria-current="page"><span>◎</span>Áreas</a>
+      <a href="/online"><span>◉</span>Online</a>
+      <a href="/offline"><span>◌</span>Offline</a>
+    </nav>
+    {{end}}
   {{end}}
 </body>
 </html>

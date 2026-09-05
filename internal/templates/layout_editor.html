@@ -11,7 +11,7 @@
 
   <header class="page-header layout-planner-header">
     <div>
-      {{if eq .LayoutMode "event"}}<a class="back-link" href="/events/{{.Event.ID}}">← Voltar ao evento</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.Venue}}</span><h1>Layout do salão</h1><p>Monte as mesas, atribua garçons e exporte para a equipe.</p>
+      {{if eq .LayoutMode "event"}}<a class="back-link" href="/offline">← Checklists salvas</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.Venue}}</span><h1>Layout do salão</h1><p>Monte as mesas, atribua garçons e exporte para a equipe. Sincronizar é opcional.</p>
       {{else}}{{if .IsEdit}}<a class="back-link" href="/layouts">← Todos os layouts</a>{{else}}<a class="back-link" href="/layouts">← Voltar</a>{{end}}<span class="eyebrow">Layout avulso</span><h1>{{if .IsEdit}}{{.StandaloneLayout.Name}}{{else}}Novo layout avulso{{end}}</h1><h2>Informe os garçons, desenhe o salão e exporte sem precisar de um evento cadastrado.</h2>{{end}}
     </div>
     <div class="layout-planner-actions layout-desktop-actions">

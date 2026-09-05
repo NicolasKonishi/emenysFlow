@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="page-wrap">
-  <header class="page-header"><div><span class="eyebrow">Planejamento e operação</span><h1>Eventos</h1><p>Do briefing ao retorno do último item.</p></div><a class="button primary" href="/events/new"><span>＋</span>Novo evento</a></header>
+  <header class="page-header"><div><span class="eyebrow">Modo online</span><h1>Eventos</h1><p>Crie, edite e reserve materiais. A checklist operacional e o layout ficam no modo offline.</p></div><a class="button primary" href="/events/new"><span>＋</span>Novo evento</a></header>
   {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
   <section class="toolbar panel slim">
     <form class="search-form" action="/events" method="get"><label class="search-box"><span>⌕</span><input type="search" name="q" value="{{.Query}}" placeholder="Buscar cliente, evento ou local..." aria-label="Buscar eventos"></label><button class="button secondary" type="submit">Buscar</button></form>

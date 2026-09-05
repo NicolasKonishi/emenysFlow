@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="page-wrap operation-page {{if eq .Operation.Stage "loading"}}loading-operation{{end}}">
   <header class="page-header">
-    <div><a class="back-link" href="/events/{{.Event.ID}}">← Voltar à checklist</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span><h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1><p>{{.Event.Name}} · {{.Event.Venue}}</p></div>
+    <div><a class="back-link" href="/events/{{.Event.ID}}/operation">← Voltar à checklist</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span><h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1><p>{{.Event.Name}} · {{.Event.Venue}}</p></div>
     <span class="badge {{statusClass .Event.Status}}">{{statusLabel .Event.Status}}</span>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}

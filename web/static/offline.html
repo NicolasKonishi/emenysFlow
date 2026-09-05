@@ -6,13 +6,28 @@
   <meta name="theme-color" content="#173f38">
   <title>emenysFlow · Modo offline</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/css/app.css?v=14">
-  <script defer src="/static/js/offline.js?v=7"></script>
+  <link rel="stylesheet" href="/static/css/app.css?v=44">
+  <script defer src="/static/js/offline.js?v=9"></script>
 </head>
 <body class="offline-shell">
   <main class="offline-page">
-    <header><span class="brand-mark">EF</span><div><span class="eyebrow">Modo offline</span><h1>Eventos disponíveis neste aparelho</h1></div></header>
-    <div class="alert info">Você está sem conexão. Consulte os dados sincronizados; alterações operacionais feitas nas telas já abertas serão enviadas quando a conexão voltar.</div>
+    <header>
+      <span class="brand-mark">EF</span>
+      <div>
+        <span class="eyebrow">Modo offline</span>
+        <h1>Checklists e layout neste aparelho</h1>
+      </div>
+    </header>
+    <div class="alert info">Você está sem conexão. Use as checklists e os layouts salvos quando estava online. Sincronizar depois é opcional.</div>
+    <section class="panel sync-preference" data-sync-preference>
+      <div>
+        <span class="eyebrow">Sincronização</span>
+        <h2>Enviar alterações para o online</h2>
+        <p>Desligado, tudo fica só neste aparelho.</p>
+      </div>
+      <label class="sync-switch"><input type="checkbox" data-sync-enabled><span>Sincronizar com o online</span></label>
+      <p class="sync-preference-status" data-sync-preference-status>A sincronização automática está desligada.</p>
+    </section>
     <section data-offline-home><p>Carregando dados locais…</p></section>
   </main>
 </body>

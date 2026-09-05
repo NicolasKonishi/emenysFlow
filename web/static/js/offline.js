@@ -4,8 +4,13 @@
   const DB_NAME = "buffetflow-offline";
   const DB_VERSION = 2;
   const DEVICE_KEY = "buffetflow_device_id";
+  const SYNC_PREF_KEY = "buffetflow_sync_enabled";
   let registration;
   let synchronizing = false;
+
+  const isSyncEnabled = () => localStorage.getItem(SYNC_PREF_KEY) === "1";
+  const setSyncEnabled = (enabled) => localStorage.setItem(SYNC_PREF_KEY, enabled ? "1" : "0");
+  const canUseOfflineData = () => Boolean(document.querySelector("[data-offline-hub], [data-sync-status-bar], [data-offline-home], [data-download-offline]"));
 
   const uuid = () => self.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const deviceID = () => {
@@ -69,15 +74,43 @@
       + photos.filter((item) => ["pending", "syncing", "failed"].includes(item.status)).length;
     const statusBar = document.querySelector("[data-sync-status-bar]");
     if (statusBar) statusBar.hidden = !(resolvedState === "syncing" || resolvedState === "error" || pending > 0);
+    const pendingLabel = document.querySelector("[data-pending-count]");
+    if (pendingLabel) pendingLabel.textContent = pending === 1 ? "1 operação pendente" : `${pending} operações pendentes`;
+    const lastSync = document.querySelector("[data-last-sync]");
+    if (lastSync) {
+      const saved = await getRecord("meta", "last_sync").catch(() => null);
+      lastSync.textContent = saved?.value ? `Último download: ${new Date(saved.value).toLocaleString("pt-BR")}` : "Ainda não salvo neste aparelho";
+    }
+    updateSyncPreferenceStatus(pending);
+  }
+
+  function updateSyncPreferenceStatus(pending = 0) {
+    const status = document.querySelector("[data-sync-preference-status]");
+    if (!status) return;
+    if (!navigator.onLine) {
+      status.textContent = "Sem conexão. As alterações ficam neste aparelho.";
+      return;
+    }
+    if (isSyncEnabled()) {
+      status.textContent = pending > 0
+        ? "Sincronização ligada. As alterações pendentes sobem automaticamente."
+        : "Sincronização ligada. Alterações da checklist e do layout sobem quando houver conexão.";
+      return;
+    }
+    status.textContent = pending > 0
+      ? "Sincronização desligada. Há alterações só neste aparelho — envie se quiser."
+      : "Sincronização automática desligada. Use “Sincronizar agora” só se quiser enviar ao online.";
   }
 
   async function refreshBootstrap() {
-    if (!navigator.onLine || !document.querySelector("[data-sync-status-bar]")) return;
+    if (!navigator.onLine || !canUseOfflineData()) return;
     const response = await fetch("/api/offline/bootstrap", { credentials: "same-origin", headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" } });
     if (!response.ok) throw new Error("Não foi possível atualizar os dados offline.");
     const data = await response.json();
     await putRecord("meta", { key: "bootstrap", value: data, updated_at: new Date().toISOString() });
     await putRecord("meta", { key: "last_sync", value: data.synced_at || new Date().toISOString() });
+    await updateStatus("Eventos salvos neste aparelho", "online");
+    return data;
   }
 
   function formPayload(form) {
@@ -323,8 +356,12 @@
     }
   }
 
-  async function syncOperations() {
+  async function syncOperations(force = false) {
     if (!navigator.onLine || synchronizing) return;
+    if (!force && !isSyncEnabled()) {
+      await updateStatus();
+      return;
+    }
     const all = await getAll("operations").catch(() => []);
     const photos = await getAll("photos").catch(() => []);
     const hasPendingUpdates = all.some((item) => item.status === "pending" || item.status === "failed")
@@ -422,36 +459,91 @@
     });
   }
 
+  function eventField(event, ...keys) {
+    for (const key of keys) {
+      if (event?.[key] != null && event[key] !== "") return event[key];
+    }
+    return "";
+  }
+
   async function renderOfflineHome() {
     const root = document.querySelector("[data-offline-home]");
     if (!root) return;
     const saved = await getRecord("meta", "bootstrap").catch(() => null);
     if (!saved?.value) {
-      root.innerHTML = "<p>Nenhum evento foi sincronizado neste aparelho. Conecte-se e abra o emenysFlow ao menos uma vez.</p>";
+      root.innerHTML = "<div class=\"empty-state panel\"><strong>Nenhum evento foi salvo neste aparelho.</strong><p>Entre no modo online, abra as checklists e use “Salvar eventos neste aparelho”.</p></div>";
       return;
     }
     const expiration = new Date(saved.value.offline_access_expires_at || 0);
     if (expiration < new Date()) {
-      root.innerHTML = "<p>O acesso offline expirou. Conecte-se novamente para validar sua sessão.</p>";
+      root.innerHTML = "<div class=\"empty-state panel\"><strong>O acesso offline expirou.</strong><p>Conecte-se novamente para validar sua sessão e baixar os eventos.</p></div>";
       return;
     }
     root.replaceChildren();
-    (saved.value.events || []).forEach((bundle) => {
-      const card = document.createElement("details");
-      card.className = "offline-event-card";
-      const event = bundle.event;
+    const events = saved.value.events || [];
+    if (!events.length) {
+      root.innerHTML = "<div class=\"empty-state panel\"><strong>Nenhum evento disponível offline.</strong><p>Cadastre um evento no modo online e salve-o neste aparelho.</p></div>";
+      return;
+    }
+    events.forEach((bundle) => {
+      const event = bundle.event || {};
+      const id = eventField(event, "id", "ID");
+      const name = eventField(event, "name", "Name") || "Evento";
+      const client = eventField(event, "client_name", "ClientName");
+      const guests = eventField(event, "guest_count", "GuestCount");
+      const venue = eventField(event, "venue", "Venue");
       const items = bundle.checklist?.items || bundle.checklist?.Items || [];
-      const menuSections = bundle.menu || [];
-      card.innerHTML = `<summary><strong>${event.name || event.Name}</strong><span>${event.client_name || event.ClientName} · ${event.guest_count || event.GuestCount} pessoas</span></summary><div class="offline-event-detail"><h3>Cardápio</h3><div data-menu></div><h3>Serviços</h3><p>${(bundle.service_ids || []).length} modelo(s) de serviço vinculado(s)</p><h3>Checklist</h3><ul data-checklist></ul></div>`;
-      const menu = card.querySelector("[data-menu]");
-      menu.textContent = menuSections.map((section) => `${section.name || section.Name || section.section_name}: ${(section.items || section.Items || []).filter((item) => !(item.was_removed || item.WasRemoved)).map((item) => item.display_name || item.DisplayName || item.name || item.Name).join(", ")}`).join(" · ") || "Sem cardápio sincronizado.";
-      const checklist = card.querySelector("[data-checklist]");
-      items.forEach((item) => {
-        const row = document.createElement("li");
-        row.textContent = `${item.name || item.Name}: ${item.required_quantity ?? item.RequiredQuantity} ${item.unit || item.Unit}`;
-        checklist.append(row);
-      });
+      const card = document.createElement("article");
+      card.className = "panel offline-event-card";
+      card.innerHTML = `<header><div><h2></h2><p></p></div></header><p></p><div class="offline-event-actions"><a class="button primary" href="/events/${id}/operation">Abrir checklist</a><a class="button secondary" href="/events/${id}/layout">Organizar layout</a></div>`;
+      card.querySelector("h2").textContent = name;
+      card.querySelector("header p").textContent = [client, venue, guests ? `${guests} pessoas` : ""].filter(Boolean).join(" · ");
+      card.querySelector("header + p").textContent = `${items.length} itens na checklist salva`;
       root.append(card);
+    });
+    const layouts = saved.value.standalone_layouts || saved.value.standaloneLayouts || [];
+    if (layouts.length) {
+      const block = document.createElement("section");
+      block.className = "panel offline-layout-panel";
+      block.innerHTML = "<div class=\"panel-heading\"><div><span class=\"eyebrow\">Organizador de layout</span><h2>Plantas salvas neste aparelho</h2></div></div><div data-layout-list></div>";
+      const list = block.querySelector("[data-layout-list]");
+      layouts.forEach((layout) => {
+        const id = eventField(layout, "id", "ID");
+        const row = document.createElement("p");
+        const link = document.createElement("a");
+        link.className = "text-link";
+        link.href = `/layouts/${id}`;
+        link.textContent = `${eventField(layout, "name", "Name") || "Layout"} →`;
+        row.append(link);
+        list.append(row);
+      });
+      root.append(block);
+    }
+  }
+
+  function bindSyncPreference() {
+    const toggle = document.querySelector("[data-sync-enabled]");
+    if (toggle) {
+      toggle.checked = isSyncEnabled();
+      toggle.addEventListener("change", async () => {
+        setSyncEnabled(toggle.checked);
+        await updateStatus();
+        if (toggle.checked && navigator.onLine) await syncOperations(true);
+      });
+    }
+    document.querySelectorAll("[data-download-offline]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await refreshBootstrap();
+          await renderOfflineHome();
+          window.alert("Eventos e layouts foram salvos neste aparelho.");
+        } catch (error) {
+          window.alert(error.message || "Não foi possível salvar os dados offline.");
+        } finally {
+          button.disabled = false;
+        }
+      });
     });
   }
 
@@ -495,10 +587,13 @@
   }, true);
 
   document.addEventListener("click", (event) => {
-    if (event.target.closest("[data-sync-now]")) syncOperations();
+    if (event.target.closest("[data-sync-now]")) syncOperations(true);
     if (event.target.closest("[data-close-conflicts]")) document.querySelector("[data-conflict-panel]").hidden = true;
   });
-  window.addEventListener("online", () => syncOperations());
+  window.addEventListener("online", () => {
+    if (isSyncEnabled()) syncOperations(true);
+    else updateStatus("Conectado — sincronização desligada", "online");
+  });
   window.addEventListener("offline", () => updateStatus("Offline — alterações serão guardadas", "offline"));
   navigator.serviceWorker?.addEventListener("message", (event) => {
     if (event.data?.type === "SYNC_REQUESTED") syncOperations();
@@ -509,13 +604,14 @@
       registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
       registration?.update().catch(() => null);
     }
+    bindSyncPreference();
     await updateStatus();
     await renderConflicts();
     await renderOfflineHome();
     initializeOperationalQuickLoading();
-    if (navigator.onLine) {
-      await syncOperations();
+    if (navigator.onLine && canUseOfflineData()) {
       refreshBootstrap().catch(() => null);
+      if (isSyncEnabled()) await syncOperations(true);
     }
   });
 })();

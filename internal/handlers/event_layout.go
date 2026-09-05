@@ -26,7 +26,7 @@ func (a *App) eventLayoutPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		layout = models.EventFloorLayout{EventID: id, LayoutJSON: `{"version":2,"width":1400,"height":900,"waiters":[],"elements":[]}`}
 	}
-	data := a.baseData(r, "Layout do salão", "events")
+	data := a.baseData(r, "Layout do salão", "layouts")
 	data.LayoutMode = "event"
 	data.Event = event
 	data.FloorLayout = layout

@@ -1,0 +1,92 @@
+{{define "content"}}
+<div class="page-wrap offline-hub" data-offline-hub>
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">Modo offline</span>
+      <h1>Checklists e layout das festas</h1>
+      <p>Os eventos salvos quando você estava online ficam neste aparelho. Sincronizar de volta é opcional.</p>
+    </div>
+    <a class="button ghost" href="/">Trocar de área</a>
+  </header>
+  {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}
+  {{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
+
+  <section class="panel sync-preference" data-sync-preference>
+    <div>
+      <span class="eyebrow">Sincronização</span>
+      <h2>Enviar alterações para o online</h2>
+      <p>Desligado, tudo fica só neste aparelho. Ligado, as mudanças da checklist e do layout sobem quando houver conexão.</p>
+    </div>
+    <div class="sync-preference-actions">
+      <label class="sync-switch">
+        <input type="checkbox" data-sync-enabled>
+        <span>Sincronizar com o online</span>
+      </label>
+      <button type="button" class="button secondary" data-download-offline>Salvar eventos neste aparelho</button>
+      <button type="button" class="button primary" data-sync-now>Sincronizar agora</button>
+    </div>
+    <p class="sync-preference-status" data-sync-preference-status>A sincronização automática está desligada.</p>
+  </section>
+
+  <section class="toolbar panel slim">
+    <form class="search-form" action="/offline" method="get">
+      <label class="search-box"><span>⌕</span><input type="search" name="q" value="{{.Query}}" placeholder="Buscar evento, cliente ou local..." aria-label="Buscar eventos salvos"></label>
+      <button class="button secondary" type="submit">Buscar</button>
+    </form>
+    <span class="result-count">{{len .Events}} eventos salvos</span>
+  </section>
+
+  <section class="offline-event-grid" data-offline-event-list>
+    {{range .Events}}
+    <article class="panel offline-event-card">
+      <header>
+        <div class="date-tile"><strong>{{.StartsAt.Local.Format "02"}}</strong><span>{{.StartsAt.Local.Format "Jan"}}</span></div>
+        <div>
+          <span class="badge {{statusClass .Status}}">{{statusLabel .Status}}</span>
+          <h2>{{.Name}}</h2>
+          <p>{{.ClientName}} · {{.Venue}} · {{.GuestCount}} pessoas</p>
+        </div>
+      </header>
+      <div class="offline-event-progress">
+        <div><span>Checklist</span><strong>{{percent .ChecklistProgress}}%</strong><div class="progress-line"><span style="width:{{percent .ChecklistProgress}}%"></span></div></div>
+        <div><span>Carregamento</span><strong>{{percent .LoadingProgress}}%</strong><div class="progress-line"><span style="width:{{percent .LoadingProgress}}%"></span></div></div>
+      </div>
+      {{if gt .MissingItems 0}}<p class="danger-text">{{.MissingItems}} itens com falta</p>{{end}}
+      <div class="offline-event-actions">
+        <a class="button primary" href="/events/{{.ID}}/operation">Abrir checklist</a>
+        <a class="button secondary" href="/events/{{.ID}}/layout">Organizar layout</a>
+      </div>
+    </article>
+    {{else}}
+    <div class="empty-state panel span-all">
+      <span>◫</span>
+      <strong>Nenhum evento salvo neste aparelho</strong>
+      <p>Entre no modo online, cadastre o evento e use <em>Salvar eventos neste aparelho</em> antes de ficar sem internet.</p>
+      <a class="button secondary" href="/online">Ir para o modo online</a>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="panel offline-layout-panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">Organizador de layout</span><h2>Plantas do salão</h2></div>
+      <a class="button primary" href="/layouts/new"><span>＋</span>Novo layout</a>
+    </div>
+    {{if .StandaloneLayouts}}
+    <div class="responsive-table"><table><thead><tr><th>Layout</th><th>Local</th><th>Garçons</th><th></th></tr></thead><tbody>
+      {{range .StandaloneLayouts}}
+      <tr>
+        <td data-label="Layout"><strong>{{.Name}}</strong>{{if .GuestCount}}<small>{{.GuestCount}} convidados previstos</small>{{end}}</td>
+        <td data-label="Local">{{if .Venue}}{{.Venue}}{{else}}—{{end}}</td>
+        <td data-label="Garçons"><strong>{{.WaiterCount}}</strong></td>
+        <td class="row-action"><a class="button ghost small" href="/layouts/{{.ID}}">Abrir →</a></td>
+      </tr>
+      {{end}}
+    </tbody></table></div>
+    {{else}}
+    <div class="empty-state compact"><strong>Nenhum layout avulso ainda</strong><p>Crie uma planta independente ou abra o layout de um evento salvo.</p></div>
+    {{end}}
+    <div class="offline-layout-foot"><a class="text-link" href="/layouts">Ver todos os layouts →</a></div>
+  </section>
+</div>
+{{end}}

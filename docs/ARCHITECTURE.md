@@ -60,33 +60,35 @@ Todas as relações críticas usam foreign keys. Eventos, itens, regras e cadast
 
 ## 5. Fluxo das telas
 
+O sistema tem duas áreas. Depois do login, a pessoa escolhe onde trabalhar.
+
 ```text
 Login
-  └─ Visão geral
-      ├─ Eventos
-      │   ├─ Novo / editar
-      │   │   ├─ Escolher cardápio e serviços
-      │   │   ├─ Personalizar itens, porções e recipientes
-      │   │   └─ Comparar / reaplicar nova versão do cardápio
-      │   ├─ Duplicar / cancelar
-      │   └─ Checklist
-      │       ├─ Recalcular
-      │       ├─ Ajustar quantidade
-      │       ├─ Marcar separado
-      │       └─ Reservar estoque
-      ├─ Estoque
-      │   ├─ Buscar / filtrar
-      │   ├─ Novo / editar / desativar
-      │   └─ Caixas das cozinheiras
-      │       └─ Abrir / adicionar / editar / remover conteúdo
-      ├─ Regras
-      │   └─ Nova / editar / ativar
-      └─ Modelos
-          ├─ Cardápios: metadados, seções, itens e escolhas
-          └─ Serviços: metadados e componentes
+  └─ Escolher área
+      ├─ Modo online
+      │   ├─ Visão geral
+      │   ├─ Eventos
+      │   │   ├─ Novo / editar
+      │   │   ├─ Cardápio, decoração e recálculo
+      │   │   └─ Reservar estoque
+      │   ├─ Estoque
+      │   │   ├─ Buscar / filtrar
+      │   │   ├─ Novo / editar / desativar
+      │   │   └─ Caixas das cozinheiras
+      │   ├─ Regras
+      │   ├─ Modelos
+      │   └─ Configurações
+      └─ Modo offline
+          ├─ Checklists dos eventos salvos neste aparelho
+          │   ├─ Separação
+          │   ├─ Carregamento
+          │   └─ Faltas
+          └─ Organizador de layout
+              ├─ Layout por evento
+              └─ Layout avulso
 ```
 
-No celular, as quatro áreas principais ficam na barra inferior e a criação de evento recebe destaque central.
+No celular, o modo online destaca a criação de evento. O modo offline destaca a criação de layout. A sincronização com o servidor é opcional.
 
 ## 6. O que permanece configurável
 

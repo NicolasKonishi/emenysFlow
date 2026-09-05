@@ -102,6 +102,7 @@ type PageData struct {
 	IsEdit                   bool
 	MenuCustomized           bool
 	FormAction               string
+	Workspace                string
 }
 
 func New(store *repositories.Store, auth *services.AuthService, checklist *services.ChecklistService, logger *slog.Logger, location *time.Location) *App {
@@ -118,7 +119,10 @@ func (a *App) Routes() http.Handler {
 	root.HandleFunc("GET /share/{token}", a.sharedEvent)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("GET /", a.dashboard)
+	protected.HandleFunc("GET /", a.workspaceChooser)
+	protected.HandleFunc("GET /online", a.onlineDashboard)
+	protected.HandleFunc("GET /offline", a.offlineHub)
+	protected.HandleFunc("POST /workspace", a.setWorkspace)
 	protected.HandleFunc("POST /logout", a.logout)
 	protected.HandleFunc("GET /events", a.events)
 	protected.HandleFunc("GET /models", a.modelsPage)
@@ -274,6 +278,7 @@ func (a *App) baseData(request *http.Request, title, nav string) PageData {
 	if user, ok := request.Context().Value(userContextKey).(models.User); ok {
 		data.User = user
 	}
+	data.Workspace = workspaceFor(request, nav)
 	return data
 }
 

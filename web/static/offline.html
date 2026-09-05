@@ -6,10 +6,20 @@
   <meta name="theme-color" content="#173f38">
   <title>emenysFlow · Modo offline</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="stylesheet" href="/static/css/app.css?v=44">
-  <script defer src="/static/js/offline.js?v=9"></script>
+  <link rel="stylesheet" href="/static/css/app.css?v=45">
+  <script defer src="/static/js/offline.js?v=10"></script>
 </head>
-<body class="offline-shell">
+<body class="offline-shell workspace-offline" data-workspace="offline">
+  <aside class="reconnect-banner" data-reconnect-banner hidden>
+    <div>
+      <strong>Conexão restabelecida</strong>
+      <p>O emenysFlow está online de novo. Deseja abrir o sistema completo?</p>
+    </div>
+    <div class="reconnect-actions">
+      <a class="button primary" href="/" data-open-online>Abrir modo online</a>
+      <button type="button" class="button ghost" data-stay-offline>Continuar offline</button>
+    </div>
+  </aside>
   <main class="offline-page">
     <header>
       <span class="brand-mark">EF</span>
@@ -18,7 +28,7 @@
         <h1>Checklists e layout neste aparelho</h1>
       </div>
     </header>
-    <div class="alert info">Você está sem conexão. Use as checklists e os layouts salvos quando estava online. Sincronizar depois é opcional.</div>
+    <div class="alert info">Sem conexão com o emenysFlow. Use as checklists e os layouts salvos. Quando o serviço voltar, você escolhe se abre o sistema completo.</div>
     <section class="panel sync-preference" data-sync-preference>
       <div>
         <span class="eyebrow">Sincronização</span>

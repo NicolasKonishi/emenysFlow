@@ -10,7 +10,15 @@
 
   const isSyncEnabled = () => localStorage.getItem(SYNC_PREF_KEY) === "1";
   const setSyncEnabled = (enabled) => localStorage.setItem(SYNC_PREF_KEY, enabled ? "1" : "0");
-  const canUseOfflineData = () => Boolean(document.querySelector("[data-offline-hub], [data-sync-status-bar], [data-offline-home], [data-download-offline]"));
+  const canUseOfflineData = () => Boolean(document.querySelector(".app-shell, [data-offline-hub], [data-sync-status-bar], [data-offline-home], [data-download-offline]"));
+  const HEALTH_URL = "/api/health";
+  const WORKSPACE_KEY = "buffetflow_workspace";
+  const PROBE_MS = 8000;
+  let serviceReachable = null;
+  let reconnectDismissed = false;
+  let switchingToOffline = false;
+  let probeTimer = 0;
+  let failCount = 0;
 
   const uuid = () => self.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const deviceID = () => {
@@ -102,8 +110,101 @@
       : "Sincronização automática desligada. Use “Sincronizar agora” só se quiser enviar ao online.";
   }
 
+  function currentWorkspace() {
+    if (document.body.classList.contains("workspace-offline") || document.querySelector("[data-offline-home]")) return "offline";
+    if (document.body.classList.contains("workspace-online")) return "online";
+    return document.body.dataset.workspace || "";
+  }
+
+  function isOfflineCapablePath(path = location.pathname) {
+    return path === "/offline"
+      || path.startsWith("/layouts")
+      || /\/events\/\d+\/(operation|layout)/.test(path)
+      || path.endsWith("/offline.html");
+  }
+
+  function persistWorkspace(mode) {
+    localStorage.setItem(WORKSPACE_KEY, mode);
+    document.cookie = `${"buffet_workspace"}=${mode}; Path=/; Max-Age=${365 * 24 * 60 * 60}; SameSite=Lax`;
+    document.body.classList.remove("workspace-online", "workspace-offline");
+    document.body.classList.add(`workspace-${mode}`);
+    document.body.dataset.workspace = mode;
+    document.querySelectorAll(".workspace-label").forEach((node) => {
+      node.textContent = mode === "offline" ? (node.closest(".mobile-header") ? "Offline" : "Modo offline") : (node.closest(".mobile-header") ? "emenysFlow" : "Modo online");
+    });
+  }
+
+  function showReconnectBanner(visible) {
+    const banner = document.querySelector("[data-reconnect-banner]");
+    if (!banner) return;
+    banner.hidden = !visible;
+  }
+
+  async function probeService() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(HEALTH_URL, {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" },
+        signal: controller.signal
+      });
+      const data = await response.json().catch(() => ({}));
+      return response.ok && data.ok === true;
+    } catch (_error) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function applyServiceState(reachable) {
+    const previous = serviceReachable;
+    serviceReachable = reachable;
+    if (!document.body.classList.contains("app-shell") && !document.body.classList.contains("offline-shell")) {
+      return reachable;
+    }
+    if (!reachable) {
+      failCount += 1;
+      if (failCount < 2 && previous !== false && navigator.onLine) return reachable;
+      reconnectDismissed = false;
+      showReconnectBanner(false);
+      persistWorkspace("offline");
+      await updateStatus("Sem conexão com o emenysFlow", "offline");
+      if (!isOfflineCapablePath() && !switchingToOffline) {
+        switchingToOffline = true;
+        location.replace("/offline");
+      }
+      return reachable;
+    }
+    failCount = 0;
+    if (currentWorkspace() === "offline") {
+      if (!reconnectDismissed) showReconnectBanner(true);
+      await updateStatus("Serviço online — continue offline ou abra o sistema completo", "online");
+    } else {
+      persistWorkspace("online");
+      showReconnectBanner(false);
+      await updateStatus("Conectado ao emenysFlow", "online");
+      fetch("/offline", { credentials: "same-origin" }).catch(() => null);
+    }
+    if (previous === false && reachable && isSyncEnabled()) {
+      syncOperations(true).catch(() => null);
+    }
+    return reachable;
+  }
+
+  async function watchServiceConnection() {
+    const reachable = await probeService();
+    await applyServiceState(reachable);
+    if (reachable && canUseOfflineData()) refreshBootstrap().catch(() => null);
+    return reachable;
+  }
+
   async function refreshBootstrap() {
-    if (!navigator.onLine || !canUseOfflineData()) return;
+    if (!canUseOfflineData()) return;
+    const reachable = serviceReachable === null ? await probeService() : serviceReachable;
+    if (!reachable) return;
     const response = await fetch("/api/offline/bootstrap", { credentials: "same-origin", headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" } });
     if (!response.ok) throw new Error("Não foi possível atualizar os dados offline.");
     const data = await response.json();
@@ -357,7 +458,8 @@
   }
 
   async function syncOperations(force = false) {
-    if (!navigator.onLine || synchronizing) return;
+    if (synchronizing) return;
+    if (serviceReachable === false || (!navigator.onLine && serviceReachable !== true)) return;
     if (!force && !isSyncEnabled()) {
       await updateStatus();
       return;
@@ -589,12 +691,17 @@
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-sync-now]")) syncOperations(true);
     if (event.target.closest("[data-close-conflicts]")) document.querySelector("[data-conflict-panel]").hidden = true;
+    if (event.target.closest("[data-stay-offline]")) {
+      reconnectDismissed = true;
+      showReconnectBanner(false);
+    }
+    if (event.target.closest("[data-open-online]")) persistWorkspace("online");
   });
-  window.addEventListener("online", () => {
-    if (isSyncEnabled()) syncOperations(true);
-    else updateStatus("Conectado — sincronização desligada", "online");
+  window.addEventListener("online", () => watchServiceConnection());
+  window.addEventListener("offline", () => applyServiceState(false));
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) watchServiceConnection();
   });
-  window.addEventListener("offline", () => updateStatus("Offline — alterações serão guardadas", "offline"));
   navigator.serviceWorker?.addEventListener("message", (event) => {
     if (event.data?.type === "SYNC_REQUESTED") syncOperations();
   });
@@ -609,9 +716,8 @@
     await renderConflicts();
     await renderOfflineHome();
     initializeOperationalQuickLoading();
-    if (navigator.onLine && canUseOfflineData()) {
-      refreshBootstrap().catch(() => null);
-      if (isSyncEnabled()) await syncOperations(true);
-    }
+    await watchServiceConnection();
+    if (serviceReachable && isSyncEnabled()) await syncOperations(true);
+    probeTimer = window.setInterval(watchServiceConnection, PROBE_MS);
   });
 })();

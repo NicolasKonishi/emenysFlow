@@ -20,21 +20,21 @@ import (
 
 func TestWorkspaceForUsesNavAndCookie(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
-	if got := workspaceFor(request, "workspace"); got != "" {
-		t.Fatalf("chooser workspace %q", got)
-	}
 	if got := workspaceFor(request, "events"); got != "online" {
 		t.Fatalf("events workspace %q", got)
 	}
 	if got := workspaceFor(request, "offline"); got != "offline" {
 		t.Fatalf("offline workspace %q", got)
 	}
-	if got := workspaceFor(request, "layouts"); got != "offline" {
-		t.Fatalf("layouts workspace %q", got)
+	if got := workspaceFor(request, "layouts"); got != "online" {
+		t.Fatalf("layouts without cookie should be online, got %q", got)
 	}
 	request.AddCookie(&http.Cookie{Name: workspaceCookie, Value: "offline"})
-	if got := workspaceFor(request, "operation"); got != "offline" {
-		t.Fatalf("cookie workspace %q", got)
+	if got := workspaceFor(request, "layouts"); got != "offline" {
+		t.Fatalf("layouts with offline cookie %q", got)
+	}
+	if got := workspaceFor(request, "events"); got != "offline" {
+		t.Fatalf("events with offline cookie %q", got)
 	}
 }
 
@@ -72,7 +72,17 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
 
-	response, err := client.PostForm(server.URL+"/login", url.Values{"email": {"admin@buffet.local"}, "password": {"admin123"}})
+	response, err := client.Get(server.URL + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	health, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(health), `"ok":true`) {
+		t.Fatalf("health %d %s", response.StatusCode, health)
+	}
+
+	response, err = client.PostForm(server.URL+"/login", url.Values{"email": {"admin@buffet.local"}, "password": {"admin123"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +92,7 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":        "Como você quer trabalhar agora?",
+		"/":        "Próximos eventos",
 		"/online":  "Próximos eventos",
 		"/offline": "Checklists e layout das festas",
 	}
@@ -99,6 +109,19 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 		if !strings.Contains(string(body), expected) {
 			t.Fatalf("GET %s missing %q", path, expected)
 		}
+	}
+
+	response, err = client.Get(server.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if !strings.Contains(string(home), "workspace-online") {
+		t.Fatal("home should render the full online workspace")
+	}
+	if !strings.Contains(string(home), "href=\"/layouts\"") {
+		t.Fatal("online workspace should include layouts")
 	}
 
 	response, err = client.PostForm(server.URL+"/workspace", url.Values{"workspace": {"offline"}})

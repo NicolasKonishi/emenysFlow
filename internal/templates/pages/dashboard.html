@@ -2,12 +2,11 @@
 <div class="page-wrap">
   <header class="page-header dashboard-heading">
     <div>
-      <span class="eyebrow">Modo online</span>
+      <span class="eyebrow">Sistema completo</span>
       <h1>Olá, {{.User.Name}}.</h1>
-      <p>Crie eventos e controle o estoque. Checklists e layout das festas ficam no modo offline.</p>
+      <p>Você está conectado ao emenysFlow. Se a conexão cair, o modo offline abre sozinho com checklists e layout.</p>
     </div>
     <div class="page-header-actions">
-      <a class="button secondary" href="/offline">Abrir modo offline</a>
       <a class="button primary" href="/events/new"><span>＋</span>Novo evento</a>
     </div>
   </header>
@@ -16,7 +15,7 @@
 
   <section class="metric-grid" aria-label="Indicadores principais">
     <article class="metric-card critical"><span class="metric-icon">!</span><div><strong>{{.Dashboard.EventsWithShortages}}</strong><span>eventos com faltas</span></div><a href="/events">Ver eventos</a></article>
-    <article class="metric-card"><span class="metric-icon">✓</span><div><strong>{{.Dashboard.AwaitingSeparation}}</strong><span>aguardando separação</span></div><a href="/offline">Abrir checklists</a></article>
+    <article class="metric-card"><span class="metric-icon">✓</span><div><strong>{{.Dashboard.AwaitingSeparation}}</strong><span>aguardando separação</span></div><a href="/events">Abrir fila</a></article>
     <article class="metric-card warm"><span class="metric-icon">↩</span><div><strong>{{.Dashboard.AwaitingReturn}}</strong><span>aguardando retorno</span></div><a href="/events">Conferir</a></article>
     <article class="metric-card"><span class="metric-icon">▤</span><div><strong>{{.Dashboard.BelowMinimumStock}}</strong><span>abaixo do mínimo</span></div><a href="/inventory">Ver estoque</a></article>
   </section>

@@ -2,9 +2,9 @@
 <div class="page-wrap">
   <header class="page-header">
     <div>
-      <span class="eyebrow">Modo offline</span>
+      <span class="eyebrow">{{if eq .Workspace "offline"}}Modo offline{{else}}Planejamento operacional{{end}}</span>
       <h1>Organizador de layout</h1>
-      <p>Monte a planta das festas neste aparelho. Sincronizar com o online é opcional.</p>
+      <p>{{if eq .Workspace "offline"}}Sem conexão com o emenysFlow. Monte a planta neste aparelho.{{else}}Monte plantas de mesas e garçons com ou sem evento cadastrado.{{end}}</p>
     </div>
     <a class="button primary" href="/layouts/new"><span>＋</span>Novo layout avulso</a>
   </header>

@@ -1,16 +1,18 @@
 # Operação offline
 
-O emenysFlow divide o trabalho em duas áreas. O **modo online** cria eventos e administra o estoque. O **modo offline** usa as checklists e o organizador de layout dos eventos que foram salvos neste aparelho.
+O emenysFlow troca de área sozinho conforme a conexão com o serviço.
+
+O **modo online** é o sistema completo. O **modo offline** usa só as checklists e o organizador de layout dos eventos salvos neste aparelho.
 
 Nenhuma senha é persistida no navegador.
 
 ## Fluxo
 
-1. Com conexão, entre no **modo online**, cadastre o evento e revise o estoque.
-2. Abra o **modo offline** (ou use *Salvar eventos neste aparelho*) para baixar checklists e layouts. Os dados ficam disponíveis localmente por 12 horas.
-3. Sem internet, a área offline continua usable: checklist de separação/carregamento e planta do salão.
-4. Sincronizar com o online **é opcional**. O interruptor *Sincronizar com o online* fica desligado por padrão.
-5. Se quiser enviar as alterações, ligue a sincronização ou toque em *Sincronizar agora*.
+1. O aparelho consulta `/api/health` de tempos em tempos.
+2. Se o serviço responder, o modo online abre com tudo: eventos, estoque, modelos, checklists e layout.
+3. Se o serviço não responder, o modo offline abre sozinho com as limitações de sempre.
+4. Quando a conexão volta, aparece o convite para abrir o sistema completo. Dá para continuar offline se preferir.
+5. Sincronizar alterações da checklist/layout **é opcional**.
 
 Cada operação possui um identificador único; repetições não são aplicadas duas vezes no servidor. Quantidades e rascunhos utilizam a versão conhecida no momento da alteração. Se houver uma versão mais nova no servidor, o painel de conflitos mostra as duas cópias e permite manter o servidor, manter a edição local ou mesclar campos compatíveis.
 

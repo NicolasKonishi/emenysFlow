@@ -62,9 +62,10 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":                    "Como você quer trabalhar agora?",
+		"/":                    "Próximos eventos",
 		"/online":              "Próximos eventos",
 		"/offline":             "Checklists e layout das festas",
+		"/api/health":          `"ok":true`,
 		"/events":              "Cliente Demonstração",
 		"/models":              "Buffet Demonstração",
 		"/models?tab=services": "Totem fotográfico",
@@ -99,9 +100,9 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/settings":                      "Configurações",
 		"/settings/users/new":            "Novo usuário",
 		"/manifest.webmanifest":          "emenysFlow",
-		"/static/offline.html":           "Checklists e layout neste aparelho",
-		"/static/js/offline.js":          "buffetflow_sync_enabled",
-		"/sw.js":                         `CACHE_VERSION = "v19"`,
+		"/static/offline.html":           "Conexão restabelecida",
+		"/static/js/offline.js":          "/api/health",
+		"/sw.js":                         `CACHE_VERSION = "v20"`,
 		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}

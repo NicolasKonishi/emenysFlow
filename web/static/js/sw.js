@@ -1,11 +1,11 @@
-const CACHE_VERSION = "v19";
+const CACHE_VERSION = "v20";
 const SHELL_CACHE = `buffetflow-shell-${CACHE_VERSION}`;
 const DATA_CACHE = `buffetflow-data-${CACHE_VERSION}`;
 const SHELL = [
   "/static/offline.html",
-  "/static/css/app.css?v=44",
+  "/static/css/app.css?v=45",
   "/static/js/app.js?v=14",
-  "/static/js/offline.js?v=9",
+  "/static/js/offline.js?v=10",
   "/static/js/layout-editor.js?v=32",
   "/static/icons/icon.svg",
   "/manifest.webmanifest"
@@ -69,6 +69,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/api/health") {
+    event.respondWith(fetch(request, { cache: "no-store" }).catch(() => new Response(JSON.stringify({ ok: false }), { status: 503, headers: { "Content-Type": "application/json" } })));
+    return;
+  }
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request, true));
     return;

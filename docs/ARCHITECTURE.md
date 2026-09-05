@@ -60,35 +60,24 @@ Todas as relações críticas usam foreign keys. Eventos, itens, regras e cadast
 
 ## 5. Fluxo das telas
 
-O sistema tem duas áreas. Depois do login, a pessoa escolhe onde trabalhar.
+O sistema tem duas áreas. A troca é automática: o cliente consulta o serviço; sem resposta, entra no modo offline; quando o serviço volta, oferece abrir o modo online.
 
 ```text
 Login
-  └─ Escolher área
-      ├─ Modo online
+  └─ Conexão com o serviço?
+      ├─ Sim → Modo online (sistema completo)
       │   ├─ Visão geral
       │   ├─ Eventos
-      │   │   ├─ Novo / editar
-      │   │   ├─ Cardápio, decoração e recálculo
-      │   │   └─ Reservar estoque
       │   ├─ Estoque
-      │   │   ├─ Buscar / filtrar
-      │   │   ├─ Novo / editar / desativar
-      │   │   └─ Caixas das cozinheiras
-      │   ├─ Regras
-      │   ├─ Modelos
-      │   └─ Configurações
-      └─ Modo offline
+      │   ├─ Layouts
+      │   ├─ Modelos, cardápios, regras e configurações
+      │   └─ Checklists e operação
+      └─ Não → Modo offline (limitado)
           ├─ Checklists dos eventos salvos neste aparelho
-          │   ├─ Separação
-          │   ├─ Carregamento
-          │   └─ Faltas
           └─ Organizador de layout
-              ├─ Layout por evento
-              └─ Layout avulso
 ```
 
-No celular, o modo online destaca a criação de evento. O modo offline destaca a criação de layout. A sincronização com o servidor é opcional.
+Quando o serviço volta, um aviso pede confirmação para abrir o sistema completo. No celular, o modo online destaca a criação de evento. O modo offline destaca o layout.
 
 ## 6. O que permanece configurável
 

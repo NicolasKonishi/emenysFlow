@@ -166,6 +166,9 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	if strings.Contains(string(layoutsBody), "Sem conexão com o emenysFlow. Monte a planta neste aparelho.") {
 		t.Fatal("live layouts page should not use the offline-only copy")
 	}
+	if strings.Contains(string(layoutsBody), "Não foi possível concluir a operação.") {
+		t.Fatal("live layouts page should not fail when listing standalone floor layouts")
+	}
 }
 
 func hasWorkspaceCookie(jar http.CookieJar, rawURL, want string) bool {

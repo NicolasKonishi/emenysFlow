@@ -60,19 +60,19 @@ Todas as relações críticas usam foreign keys. Eventos, itens, regras e cadast
 
 ## 5. Fluxo das telas
 
-O sistema tem duas áreas. A troca é automática: o cliente consulta o serviço; sem resposta, entra no modo offline; quando o serviço volta, oferece abrir o modo online.
+O sistema tem duas áreas. Depois do login você escolhe online ou offline. Se o serviço sumir, o modo offline abre sozinho; quando volta, o aparelho pergunta se abre o sistema completo.
 
 ```text
 Login
-  └─ Conexão com o serviço?
-      ├─ Sim → Modo online (sistema completo)
+  └─ Escolher área
+      ├─ Modo online (sistema completo)
       │   ├─ Visão geral
       │   ├─ Eventos
       │   ├─ Estoque
       │   ├─ Layouts
       │   ├─ Modelos, cardápios, regras e configurações
       │   └─ Checklists e operação
-      └─ Não → Modo offline (limitado)
+      └─ Modo offline (limitado)
           ├─ Checklists dos eventos salvos neste aparelho
           └─ Organizador de layout
 ```

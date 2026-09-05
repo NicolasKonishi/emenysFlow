@@ -1178,7 +1178,8 @@ function initializeLayoutEditor(root = document) {
         "coordenação e líder sem mesa",
       ].filter(Boolean);
       if (plan.servingPeople > 0) {
-        parts.push(`${formatTablesPerPerson(plan.tablesPerPerson)} mesas por pessoa na pista`);
+        const per = formatTablesPerPerson(plan.tablesPerPerson);
+        parts.push(`${per} ${per === "1" ? "mesa" : "mesas"} por pessoa na pista`);
       } else if (plan.tableCount > 0) {
         parts.push("ninguém na pista até incluir o colíder ou mais garçons");
       }

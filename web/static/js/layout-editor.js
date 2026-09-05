@@ -234,6 +234,16 @@ function tableCount(elements) {
   return elements.filter((item) => item.type === "table_round" || item.type === "table_rect").length;
 }
 
+function resizeWaiterRoster(names, count) {
+  const size = Math.max(0, Math.min(30, Number(count) || 0));
+  const source = Array.isArray(names) ? names : [];
+  const next = [];
+  for (let index = 0; index < size; index += 1) {
+    next.push(source[index] || `Garçom ${index + 1}`);
+  }
+  return next;
+}
+
 function waiterNamesFromElements(elements) {
   const names = new Set();
   elements.forEach((item) => {
@@ -671,8 +681,6 @@ function initializeLayoutEditor(root = document) {
   const metaForm = editor.querySelector("[data-layout-meta-form]");
   const waiterCountInput = editor.querySelector("[data-layout-waiter-count]");
   const waiterNameGrid = editor.querySelector("[data-layout-waiter-name-grid]");
-  const waiterNamesSection = editor.querySelector("[data-layout-waiter-names]");
-  const waiterEditButton = editor.querySelector("[data-layout-waiter-edit]");
   const waiterSelect = propsForm?.querySelector('[data-layout-prop="waiter"]');
   const zoomLabel = editor.querySelector("[data-layout-zoom-label]");
   const bgFill = svg.querySelector("[data-layout-bg-fill]");
@@ -700,6 +708,11 @@ function initializeLayoutEditor(root = document) {
     configuredWaiters = Array.from({ length: eventWaiters }, (_, index) => `Garçom ${index + 1}`);
   }
   state.waiters = [...configuredWaiters];
+  if (waiterCountInput) {
+    if (configuredWaiters.length) waiterCountInput.value = String(configuredWaiters.length);
+    else configuredWaiters = resizeWaiterRoster([], Number(waiterCountInput.value) || 0);
+    editor.dataset.waiterCount = String(configuredWaiters.length);
+  }
   let includeCoLeader = false;
 
   let selectedId = null;
@@ -730,7 +743,7 @@ function initializeLayoutEditor(root = document) {
 
   function staffCounts() {
     return {
-      waiters: configuredWaiters.filter(Boolean).length || Number(editor.dataset.waiterCount) || 0,
+      waiters: configuredWaiters.length || Number(waiterCountInput?.value) || Number(editor.dataset.waiterCount) || 0,
       coordinators: Number(editor.dataset.coordinatorCount) || 0,
       leaders: Number(editor.dataset.leaderCount) || 0,
       coleaders: Number(editor.dataset.coleaderCount) || 0,
@@ -1033,7 +1046,7 @@ function initializeLayoutEditor(root = document) {
     registerWaiterColors();
     refreshWaiterSelect();
     syncStandaloneHiddenFields();
-    if (statConfiguredWaiters) statConfiguredWaiters.textContent = String(configuredWaiters.filter(Boolean).length);
+    if (statConfiguredWaiters) statConfiguredWaiters.textContent = String(configuredWaiters.length);
     updateLegend();
     refreshDivisionPanel();
   }
@@ -1053,9 +1066,10 @@ function initializeLayoutEditor(root = document) {
     });
   }
 
-  function renderWaiterNameGrid() {
-    if (!waiterNameGrid) return;
-    waiterNameGrid.replaceChildren();
+  function fillWaiterNameGrid(grid) {
+    if (!grid) return;
+    grid.hidden = false;
+    grid.replaceChildren();
     const shadow = shadowWaiterName();
     configuredWaiters.forEach((name, index) => {
       const label = document.createElement("label");
@@ -1071,8 +1085,12 @@ function initializeLayoutEditor(root = document) {
       input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
       bindWaiterNameInput(input, index);
       label.append(title, input);
-      waiterNameGrid.append(label);
+      grid.append(label);
     });
+  }
+
+  function renderWaiterNameGrid() {
+    editor.querySelectorAll("[data-layout-waiter-name-grid]").forEach((grid) => fillWaiterNameGrid(grid));
   }
   function refreshWaiterSelect(select = waiterSelect) {
     if (!select) return;
@@ -1098,24 +1116,32 @@ function initializeLayoutEditor(root = document) {
     select.value = current;
   }
 
-  function setWaiterNamesEditing(open) {
-    if (!waiterNameGrid) return;
-    waiterNameGrid.hidden = !open;
-    waiterNamesSection?.classList.toggle("is-editing", open);
-    if (waiterEditButton) waiterEditButton.textContent = open ? "Ocultar garçons" : "Editar garçons";
+  function syncWaiterCountInputs(count) {
+    editor.querySelectorAll("[data-layout-waiter-count]").forEach((input) => {
+      if (document.activeElement === input) return;
+      input.value = String(count);
+    });
+    if (waiterCountInput && document.activeElement !== waiterCountInput) {
+      waiterCountInput.value = String(count);
+    }
+    editor.dataset.waiterCount = String(count);
   }
 
-  function rebuildWaiterNamesFromCount() {
-    if (!waiterCountInput) return;
-    const count = Math.max(0, Math.min(30, Number(waiterCountInput.value) || 0));
-    waiterCountInput.value = String(count);
-    const next = [];
-    for (let index = 0; index < count; index += 1) {
-      next.push(configuredWaiters[index] || `Garçom ${index + 1}`);
-    }
-    configuredWaiters = next;
+  function rebuildWaiterNamesFromCount(rawCount) {
+    const source = rawCount ?? editor.querySelector("[data-layout-waiter-count]:focus")?.value ?? waiterCountInput?.value ?? configuredWaiters.length;
+    const count = Math.max(0, Math.min(30, Number(source) || 0));
+    if (waiterCountInput) waiterCountInput.value = String(count);
+    syncWaiterCountInputs(count);
+    configuredWaiters = resizeWaiterRoster(configuredWaiters, count);
     syncConfiguredWaiters({ rebuildGrid: true });
     updateStats();
+  }
+
+  function stepWaiterCount(delta, fromInput) {
+    const current = Number(fromInput?.value ?? waiterCountInput?.value ?? configuredWaiters.length) || 0;
+    const next = Math.max(0, Math.min(30, current + delta));
+    if (fromInput) fromInput.value = String(next);
+    rebuildWaiterNamesFromCount(next);
   }
 
   function syncStandaloneHiddenFields() {
@@ -1128,7 +1154,7 @@ function initializeLayoutEditor(root = document) {
       set("name", metaForm.querySelector('[name="name"]')?.value || "");
       set("venue", metaForm.querySelector('[name="venue"]')?.value || "");
       set("guest_count", metaForm.querySelector('[name="guest_count"]')?.value || "0");
-      set("waiter_count", metaForm.querySelector('[name="waiter_count"]')?.value || "0");
+      set("waiter_count", waiterCountInput?.value || metaForm.querySelector('[name="waiter_count"]')?.value || "0");
     }
     set("waiter_names_json", JSON.stringify(configuredWaiters.filter(Boolean)));
   }
@@ -1143,6 +1169,7 @@ function initializeLayoutEditor(root = document) {
     if (statTables) statTables.textContent = String(tableCount(state.elements));
     if (statWaiters) statWaiters.textContent = String(waiterNamesFromElements(state.elements).length);
     if (statGuests && metaForm) statGuests.textContent = metaForm.querySelector('[name="guest_count"]')?.value || "0";
+    if (statConfiguredWaiters) statConfiguredWaiters.textContent = String(configuredWaiters.length || Number(waiterCountInput?.value) || 0);
     refreshDivisionPanel();
   }
 
@@ -1932,60 +1959,44 @@ function initializeLayoutEditor(root = document) {
   }
 
   function openSetupSheet() {
-    if (!floatSheet || !floatSheetBody || !metaForm) return;
+    if (!floatSheet || !floatSheetBody) return;
     floatSheet.hidden = false;
     floatSheet.dataset.open = "setup";
     document.body.classList.add("layout-sheet-open");
     if (floatSheetTitle) floatSheetTitle.textContent = "Layout e garçons";
     floatSheetBody.replaceChildren();
-    const clone = metaForm.cloneNode(true);
-    clone.classList.remove("layout-desktop-meta");
-    const syncFromClone = (input) => {
-      const original = metaForm.querySelector(`[name="${input.name}"]`);
-      if (original) original.value = input.value;
-      if (input.name === "waiter_count") rebuildWaiterNamesFromCount();
-      syncStandaloneHiddenFields();
-      updateStats();
-      if (editor.dataset.exportTitle !== undefined && input.name === "name") {
-        editor.dataset.exportTitle = input.value;
-        const floatTitle = editor.querySelector("[data-layout-float-title]");
-        if (floatTitle) floatTitle.textContent = input.value || "Novo layout";
-      }
-    };
-    clone.querySelectorAll("input").forEach((input) => {
-      input.addEventListener("input", () => syncFromClone(input));
-      input.addEventListener("change", () => syncFromClone(input));
-    });
-    floatSheetBody.append(clone);
-    const grid = clone.querySelector("[data-layout-waiter-name-grid]");
-    const editButton = clone.querySelector("[data-layout-waiter-edit]");
-    if (grid) grid.hidden = false;
-    if (editButton) editButton.hidden = true;
-    if (grid) {
-      grid.replaceChildren();
-      const shadow = shadowWaiterName();
-      configuredWaiters.forEach((name, index) => {
-        const label = document.createElement("label");
-        const title = document.createElement("span");
-        title.className = "layout-waiter-name-title";
-        const swatch = document.createElement("span");
-        swatch.className = "layout-legend-swatch";
-        swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
-        title.append(swatch, document.createTextNode(name === shadow ? `Garçom ${index + 1} · sombra` : `Garçom ${index + 1}`));
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = name;
-        input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
-        bindWaiterNameInput(input, index);
-        label.append(title, input);
-        grid.append(label);
+    if (metaForm) {
+      const clone = metaForm.cloneNode(true);
+      clone.classList.remove("layout-desktop-meta");
+      const syncFromClone = (input) => {
+        const original = metaForm.querySelector(`[name="${input.name}"]`);
+        if (original) original.value = input.value;
+        syncStandaloneHiddenFields();
+        updateStats();
+        if (editor.dataset.exportTitle !== undefined && input.name === "name") {
+          editor.dataset.exportTitle = input.value;
+          const floatTitle = editor.querySelector("[data-layout-float-title]");
+          if (floatTitle) floatTitle.textContent = input.value || "Novo layout";
+        }
+      };
+      clone.querySelectorAll("input").forEach((input) => {
+        input.addEventListener("input", () => syncFromClone(input));
+        input.addEventListener("change", () => syncFromClone(input));
       });
-      const divisionClone = editor.querySelector("[data-layout-division]")?.cloneNode(true);
-      if (divisionClone) {
-        bindDivisionControls(divisionClone);
-        refreshDivisionPanel(divisionClone);
-        floatSheetBody.append(divisionClone);
-      }
+      floatSheetBody.append(clone);
+    }
+    const roster = editor.querySelector("[data-layout-waiter-roster]");
+    if (roster) {
+      const rosterClone = roster.cloneNode(true);
+      rosterClone.classList.remove("layout-desktop-meta");
+      floatSheetBody.append(rosterClone);
+      renderWaiterNameGrid();
+    }
+    const divisionClone = editor.querySelector("[data-layout-division]")?.cloneNode(true);
+    if (divisionClone) {
+      bindDivisionControls(divisionClone);
+      refreshDivisionPanel(divisionClone);
+      floatSheetBody.append(divisionClone);
     }
     const done = document.createElement("button");
     done.type = "button";
@@ -2347,13 +2358,19 @@ function initializeLayoutEditor(root = document) {
       syncStandaloneHiddenFields();
       updateStats();
     });
-    if (input.name === "waiter_count") input.addEventListener("change", rebuildWaiterNamesFromCount);
   });
 
-  waiterCountInput?.addEventListener("change", rebuildWaiterNamesFromCount);
-
-  waiterEditButton?.addEventListener("click", () => {
-    setWaiterNamesEditing(Boolean(waiterNameGrid?.hidden));
+  editor.addEventListener("input", (event) => {
+    const countInput = event.target.closest("[data-layout-waiter-count]");
+    if (!countInput) return;
+    rebuildWaiterNamesFromCount(countInput.value);
+  });
+  editor.addEventListener("click", (event) => {
+    const step = event.target.closest("[data-layout-waiter-step]");
+    if (!step) return;
+    event.preventDefault();
+    const input = step.closest(".layout-stepper")?.querySelector("[data-layout-waiter-count]");
+    stepWaiterCount(Number(step.dataset.layoutWaiterStep) || 0, input);
   });
 
   saveForm?.addEventListener("layout-persist", () => {

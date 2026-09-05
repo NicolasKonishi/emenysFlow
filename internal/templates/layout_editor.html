@@ -1,5 +1,5 @@
 {{define "layout_editor"}}
-<div class="layout-planner{{if eq .LayoutMode "standalone"}} layout-planner-standalone{{end}}" data-layout-editor
+<div class="layout-planner layout-theme{{if eq .LayoutMode "standalone"}} layout-planner-standalone{{end}}" data-layout-editor
   data-layout-mode="{{.LayoutMode}}"
   {{if eq .LayoutMode "event"}}data-event-id="{{.Event.ID}}" data-guest-count="{{.Event.GuestCount}}" data-waiter-count="{{.StaffSummary.Waiters}}" data-export-title="{{.Event.ClientName}}"{{else}}data-layout-id="{{.StandaloneLayout.ID}}" data-guest-count="{{.StandaloneLayout.GuestCount}}" data-waiter-count="{{.StandaloneLayout.WaiterCount}}" data-export-title="{{.StandaloneLayout.Name}}" data-waiter-names='{{.StandaloneLayout.WaiterNamesJSON}}'{{if not .IsEdit}} data-layout-new="1"{{end}}{{end}}>
 
@@ -102,15 +102,32 @@
           </div>
           <svg class="layout-canvas" data-layout-canvas viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas do layout">
             <defs>
+              <linearGradient id="layout-glass-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.46"/>
+                <stop offset="42%" stop-color="#ffffff" stop-opacity="0.16"/>
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.07"/>
+              </linearGradient>
+              <linearGradient id="layout-glass-fill-marker" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.14"/>
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.04"/>
+              </linearGradient>
+              <radialGradient id="layout-glass-highlight" cx="32%" cy="24%" r="70%">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.62"/>
+                <stop offset="55%" stop-color="#ffffff" stop-opacity="0.08"/>
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+              </radialGradient>
+              <filter id="layout-glass-shadow" x="-45%" y="-45%" width="190%" height="190%">
+                <feDropShadow dx="0" dy="3" stdDeviation="3.2" flood-color="#000000" flood-opacity="0.55"/>
+              </filter>
               <pattern id="layout-grid-minor" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#d8ddd3" stroke-width="1"/>
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
               </pattern>
               <pattern id="layout-grid" width="160" height="160" patternUnits="userSpaceOnUse">
                 <rect width="160" height="160" fill="url(#layout-grid-minor)"/>
-                <path d="M 160 0 L 0 0 0 160" fill="none" stroke="#bcc7b8" stroke-width="1.5"/>
+                <path d="M 160 0 L 0 0 0 160" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
               </pattern>
             </defs>
-            <rect data-layout-bg-fill fill="#fafbf8"/>
+            <rect data-layout-bg-fill fill="#101010"/>
             <rect data-layout-bg-grid fill="url(#layout-grid)"/>
             <g data-layout-layer="tables"></g>
             <g data-layout-layer="markers"></g>

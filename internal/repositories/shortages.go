@@ -90,6 +90,12 @@ func (s *Store) EnsureCalculatedShortages(ctx context.Context, eventID int64) er
 	})
 }
 
+func (s *Store) ChecklistItemRequired(ctx context.Context, eventID, itemID int64) (float64, error) {
+	var required float64
+	err := s.db.QueryRowContext(ctx, `SELECT item.required_quantity FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE item.id=? AND checklist.event_id=? AND item.active=1`, itemID, eventID).Scan(&required)
+	return required, err
+}
+
 func (s *Store) SaveChecklistShortage(ctx context.Context, item models.ChecklistShortage, userID int64) error {
 	if item.MissingQuantity <= 0 || strings.TrimSpace(item.Reason) == "" {
 		return fmt.Errorf("missing quantity and reason are required")

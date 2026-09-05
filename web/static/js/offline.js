@@ -416,6 +416,37 @@
     await updateStatus("Offline — carregamento salvo no aparelho", "pending");
   }
 
+  async function queueChecklistAction(input = {}) {
+    const eventID = Number(input.eventID || 0);
+    const itemID = Number(input.itemID || 0);
+    const required = Number(input.required || 0);
+    if (input.mode === "loading-decision") {
+      await queueLoadingDecision(eventID, itemID, input.kind === "missing" ? "missing" : "complete", input.kind === "missing" ? required : 0);
+      return;
+    }
+    if (input.kind === "missing") {
+      const operation = {
+        client_operation_id: uuid(), device_id: deviceID(), operation_type: "mark_shortage", entity_type: "checklist_item",
+        entity_id: itemID, base_version: Number(input.version || 0),
+        payload: { event_id: eventID, missing_quantity: required, reason: "Não tem no estoque", resolution_type: "other" },
+        local_date: new Date().toISOString(), attempts: 0, last_attempt: null, last_error: "", status: "pending"
+      };
+      await putRecord("operations", operation);
+      await updateStatus("Offline — item marcado sem estoque", "pending");
+      return;
+    }
+    const operation = {
+      client_operation_id: uuid(), device_id: deviceID(), operation_type: "update_quantity", entity_type: "checklist_item",
+      entity_id: itemID, base_version: Number(input.version || 0),
+      payload: { event_id: eventID, stage: input.stage || "separation", quantity: required, notes: "" },
+      local_date: new Date().toISOString(), attempts: 0, last_attempt: null, last_error: "", status: "pending"
+    };
+    await putRecord("operations", operation);
+    await updateStatus("Offline — item conferido no aparelho", "pending");
+  }
+
+  window.emenysQueueChecklistAction = queueChecklistAction;
+
   function initializeOperationalQuickLoading(root = document) {
     if (!matchMedia("(max-width: 820px)").matches) return;
     root.querySelectorAll('.operational-hub form[data-operation-type="update_quantity"] input[name="stage"][value="loading"]').forEach((stage) => {

@@ -48,6 +48,9 @@ func (a *App) operationHub(w http.ResponseWriter, r *http.Request) {
 	for _, item := range checklist.Items {
 		item.Shortage = activeShortages[item.ID]
 		if tab == "missing" {
+			if item.Shortage != nil {
+				filtered = append(filtered, item)
+			}
 			continue
 		}
 		if item.Shortage != nil {
@@ -112,6 +115,17 @@ func (a *App) operationShortage(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = r.ParseForm()
 	shortage := models.ChecklistShortage{EventID: eventID, ChecklistItemID: itemID, MissingQuantity: parseFloat(r.FormValue("missing_quantity")), Reason: strings.TrimSpace(r.FormValue("reason")), ResolutionType: r.FormValue("resolution_type"), ResponsibleName: strings.TrimSpace(r.FormValue("responsible_name")), SupplierName: strings.TrimSpace(r.FormValue("supplier_name")), Notes: strings.TrimSpace(r.FormValue("notes"))}
+	if shortage.Reason == "" {
+		shortage.Reason = "Não tem no estoque"
+	}
+	if shortage.ResolutionType == "" {
+		shortage.ResolutionType = "other"
+	}
+	if shortage.MissingQuantity <= 0 {
+		if required, err := a.store.ChecklistItemRequired(r.Context(), eventID, itemID); err == nil {
+			shortage.MissingQuantity = required
+		}
+	}
 	if raw := r.FormValue("due_at"); raw != "" {
 		shortage.DueAt, _ = time.ParseInLocation("2006-01-02T15:04", raw, a.location)
 	}

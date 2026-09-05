@@ -1,9 +1,9 @@
 {{define "content"}}
 <div class="page-wrap">
-  <header class="page-header"><div><span class="eyebrow">Planejamento e operação</span><h1>Eventos</h1><p>Do briefing ao retorno do último item. Sem conexão, só checklists e layout ficam disponíveis.</p></div><a class="button primary" href="/events/new"><span>＋</span>Novo evento</a></header>
+  <header class="page-header"><div><span class="eyebrow">Planejamento e operação</span><h1>Eventos</h1><p>Do briefing ao retorno do último item. Sem conexão, só checklists e layout ficam disponíveis.</p></div><a class="button primary" href="/events/new">{{icon "plus"}}Novo evento</a></header>
   {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
   <section class="toolbar panel slim">
-    <form class="search-form" action="/events" method="get"><label class="search-box"><span>⌕</span><input type="search" name="q" value="{{.Query}}" placeholder="Buscar cliente, evento ou local..." aria-label="Buscar eventos"></label><button class="button secondary" type="submit">Buscar</button></form>
+    <form class="search-form" action="/events" method="get"><label class="search-box">{{icon "search"}}<input type="search" name="q" value="{{.Query}}" placeholder="Buscar cliente, evento ou local..." aria-label="Buscar eventos"></label><button class="button secondary" type="submit">Buscar</button></form>
     <span class="result-count">{{len .Events}} eventos</span>
   </section>
   <section class="panel table-panel">
@@ -15,10 +15,10 @@
         <td data-label="Convidados"><strong>{{.GuestCount}}</strong><small>pessoas</small></td>
         <td data-label="Checklist"><div class="progress-cell"><div class="progress-line"><span style="width:{{percent .ChecklistProgress}}%"></span></div><small>{{percent .ChecklistProgress}}% {{if gt .MissingItems 0}}· <b class="danger-text">{{.MissingItems}} faltas</b>{{end}}</small></div></td>
         <td data-label="Status"><span class="badge {{statusClass .Status}}">{{statusLabel .Status}}</span></td>
-        <td class="row-action"><a class="button ghost small" href="/events/{{.ID}}">Abrir →</a><form action="/events/{{.ID}}/cancel" method="post" data-confirm="Cancelar este evento e removê-lo da lista? As reservas serão liberadas."><button class="button danger small" type="submit">Cancelar</button></form></td>
+        <td class="row-action"><a class="button ghost small" href="/events/{{.ID}}">Abrir {{icon "arrow"}}</a><form action="/events/{{.ID}}/cancel" method="post" data-confirm="Cancelar este evento e removê-lo da lista? As reservas serão liberadas."><button class="button danger small" type="submit">Cancelar</button></form></td>
       </tr>{{end}}
     </tbody></table></div>
-    {{else}}<div class="empty-state"><span>◫</span><strong>Nenhum evento encontrado</strong><p>Altere a busca ou cadastre um novo evento.</p></div>{{end}}
+    {{else}}<div class="empty-state">{{icon "events"}}<strong>Nenhum evento encontrado</strong><p>Altere a busca ou cadastre um novo evento.</p></div>{{end}}
   </section>
 </div>
 {{end}}

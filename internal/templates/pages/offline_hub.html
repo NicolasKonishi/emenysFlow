@@ -29,7 +29,7 @@
 
   <section class="toolbar panel slim">
     <form class="search-form" action="/offline" method="get">
-      <label class="search-box"><span>⌕</span><input type="search" name="q" value="{{.Query}}" placeholder="Buscar evento, cliente ou local..." aria-label="Buscar eventos salvos"></label>
+      <label class="search-box">{{icon "search"}}<input type="search" name="q" value="{{.Query}}" placeholder="Buscar evento, cliente ou local..." aria-label="Buscar eventos salvos"></label>
       <button class="button secondary" type="submit">Buscar</button>
     </form>
     <span class="result-count">{{len .Events}} eventos salvos</span>
@@ -58,7 +58,7 @@
     </article>
     {{else}}
     <div class="empty-state panel span-all">
-      <span>◫</span>
+      {{icon "events"}}
       <strong>Nenhum evento salvo neste aparelho</strong>
       <p>Entre no modo online, cadastre o evento e use <em>Salvar eventos neste aparelho</em> antes de ficar sem internet.</p>
       <a class="button secondary" href="/online">Ir para o modo online</a>
@@ -69,7 +69,7 @@
   <section class="panel offline-layout-panel">
     <div class="panel-heading">
       <div><span class="eyebrow">Organizador de layout</span><h2>Plantas do salão</h2></div>
-      <a class="button primary" href="/layouts/new"><span>＋</span>Novo layout</a>
+      <a class="button primary" href="/layouts/new">{{icon "plus"}}Novo layout</a>
     </div>
     {{if .StandaloneLayouts}}
     <div class="responsive-table"><table><thead><tr><th>Layout</th><th>Local</th><th>Garçons</th><th></th></tr></thead><tbody>
@@ -78,14 +78,14 @@
         <td data-label="Layout"><strong>{{.Name}}</strong>{{if .GuestCount}}<small>{{.GuestCount}} convidados previstos</small>{{end}}</td>
         <td data-label="Local">{{if .Venue}}{{.Venue}}{{else}}—{{end}}</td>
         <td data-label="Garçons"><strong>{{.WaiterCount}}</strong></td>
-        <td class="row-action"><a class="button ghost small" href="/layouts/{{.ID}}">Abrir →</a></td>
+        <td class="row-action"><a class="button ghost small" href="/layouts/{{.ID}}">Abrir {{icon "arrow"}}</a></td>
       </tr>
       {{end}}
     </tbody></table></div>
     {{else}}
     <div class="empty-state compact"><strong>Nenhum layout avulso ainda</strong><p>Crie uma planta independente ou abra o layout de um evento salvo.</p></div>
     {{end}}
-    <div class="offline-layout-foot"><a class="text-link" href="/layouts">Ver todos os layouts →</a></div>
+    <div class="offline-layout-foot"><a class="text-link" href="/layouts">Ver todos os layouts {{icon "arrow"}}</a></div>
   </section>
 </div>
 {{end}}

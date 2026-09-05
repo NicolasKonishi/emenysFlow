@@ -1731,7 +1731,7 @@ function initializeLayoutEditor(root = document) {
     closeSheet();
     closeRowPanel();
     if (!selectedElement()) {
-      showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use ✎ para editar, ou arraste para mover.");
+      showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use Editar, ou arraste para mover.");
       return;
     }
     if (propsPanel) {
@@ -1908,7 +1908,7 @@ function initializeLayoutEditor(root = document) {
       }
       if (!floatSheet || !floatSheetBody) return;
       if (!selectedElement()) {
-        showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use ✎ para editar, ou arraste para mover.");
+        showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use Editar, ou arraste para mover.");
         return;
       }
       floatSheet.hidden = false;

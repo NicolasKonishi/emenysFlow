@@ -4,20 +4,20 @@
   {{if eq .LayoutMode "event"}}data-event-id="{{.Event.ID}}" data-guest-count="{{.Event.GuestCount}}" data-waiter-count="{{.StaffSummary.Waiters}}" data-export-title="{{.Event.ClientName}}"{{else}}data-layout-id="{{.StandaloneLayout.ID}}" data-guest-count="{{.StandaloneLayout.GuestCount}}" data-waiter-count="{{.StandaloneLayout.WaiterCount}}" data-export-title="{{.StandaloneLayout.Name}}" data-waiter-names='{{.StandaloneLayout.WaiterNamesJSON}}'{{if not .IsEdit}} data-layout-new="1"{{end}}{{end}}>
 
   <div class="layout-float-top" data-layout-float-top hidden>
-    <button class="layout-float-btn" type="button" data-layout-fullscreen-exit aria-label="Sair da tela cheia">←</button>
+    <button class="layout-float-btn" type="button" data-layout-fullscreen-exit aria-label="Sair da tela cheia">{{icon "back"}}</button>
     <strong data-layout-float-title>{{if eq .LayoutMode "event"}}{{.Event.ClientName}}{{else}}{{.StandaloneLayout.Name}}{{end}}</strong>
     <button class="layout-float-btn primary" type="submit" form="layout-save-form">Salvar</button>
   </div>
 
   <header class="page-header layout-planner-header">
     <div>
-      {{if eq .LayoutMode "event"}}{{if eq .Workspace "offline"}}<a class="back-link" href="/offline">← Checklists salvas</a>{{else}}<a class="back-link" href="/events/{{.Event.ID}}">← Voltar ao evento</a>{{end}}<span class="eyebrow">{{.Event.ClientName}} · {{.Event.Venue}}</span><h1>Layout do salão</h1><p>Monte as mesas, atribua garçons e exporte para a equipe.</p>
-      {{else}}{{if .IsEdit}}<a class="back-link" href="/layouts">← Todos os layouts</a>{{else}}<a class="back-link" href="/layouts">← Voltar</a>{{end}}<span class="eyebrow">Layout avulso</span><h1>{{if .IsEdit}}{{.StandaloneLayout.Name}}{{else}}Novo layout avulso{{end}}</h1><h2>Informe os garçons, desenhe o salão e exporte sem precisar de um evento cadastrado.</h2>{{end}}
+      {{if eq .LayoutMode "event"}}{{if eq .Workspace "offline"}}<a class="back-link" href="/offline">{{icon "back"}} Checklists salvas</a>{{else}}<a class="back-link" href="/events/{{.Event.ID}}">{{icon "back"}} Voltar ao evento</a>{{end}}<span class="eyebrow">{{.Event.ClientName}} · {{.Event.Venue}}</span><h1>Layout do salão</h1><p>Monte as mesas, atribua garçons e exporte para a equipe.</p>
+      {{else}}{{if .IsEdit}}<a class="back-link" href="/layouts">{{icon "back"}} Todos os layouts</a>{{else}}<a class="back-link" href="/layouts">{{icon "back"}} Voltar</a>{{end}}<span class="eyebrow">Layout avulso</span><h1>{{if .IsEdit}}{{.StandaloneLayout.Name}}{{else}}Novo layout avulso{{end}}</h1><h2>Informe os garçons, desenhe o salão e exporte sem precisar de um evento cadastrado.</h2>{{end}}
     </div>
     <div class="layout-planner-actions layout-desktop-actions">
-      <button class="button secondary" type="button" data-layout-fullscreen>⛶ Tela cheia</button>
-      <button class="button secondary" type="button" data-layout-export="png">↓ PNG</button>
-      <button class="button secondary" type="button" data-layout-export="pdf">↓ PDF</button>
+      <button class="button secondary" type="button" data-layout-fullscreen>{{icon "fullscreen"}} Tela cheia</button>
+      <button class="button secondary" type="button" data-layout-export="png">{{icon "download"}} PNG</button>
+      <button class="button secondary" type="button" data-layout-export="pdf">{{icon "download"}} PDF</button>
       <button class="button primary" type="submit" form="layout-save-form">Salvar layout</button>
     </div>
   </header>
@@ -55,12 +55,12 @@
       <aside class="panel layout-toolbar layout-desktop-toolbar" aria-label="Ferramentas do layout">
         <span class="eyebrow">Ferramentas</span>
         <div class="layout-tool-group">
-          <button class="layout-tool active" type="button" data-layout-tool="select" title="Selecionar e mover">↖ Selecionar</button>
-          <button class="layout-tool" type="button" data-layout-tool="table_round" title="Mesa redonda">○ Mesa redonda</button>
-          <button class="layout-tool" type="button" data-layout-tool="table_rect" title="Mesa retangular">▭ Mesa retangular</button>
-          <button class="layout-tool" type="button" data-layout-sheet-open="row" title="Fileira de mesas">⊞ Fileira de mesas</button>
-          <button class="layout-tool" type="button" data-layout-tool="marker" title="Área neutra">▢ Área neutra</button>
-          <button class="layout-tool" type="button" data-layout-sheet-open="props" title="Editar item selecionado">✎ Editar</button>
+          <button class="layout-tool active" type="button" data-layout-tool="select" title="Selecionar e mover">{{icon "select"}} Selecionar</button>
+          <button class="layout-tool" type="button" data-layout-tool="table_round" title="Mesa redonda">{{icon "table-round"}} Mesa redonda</button>
+          <button class="layout-tool" type="button" data-layout-tool="table_rect" title="Mesa retangular">{{icon "table-rect"}} Mesa retangular</button>
+          <button class="layout-tool" type="button" data-layout-sheet-open="row" title="Fileira de mesas">{{icon "table-row"}} Fileira de mesas</button>
+          <button class="layout-tool" type="button" data-layout-tool="marker" title="Área neutra">{{icon "marker"}} Área neutra</button>
+          <button class="layout-tool" type="button" data-layout-sheet-open="props" title="Editar item selecionado">{{icon "edit"}} Editar</button>
         </div>
         <div class="layout-tool-group">
           <button class="button ghost small full" type="button" data-layout-action="duplicate">Duplicar selecionado</button>
@@ -89,16 +89,16 @@
             <button class="button primary full" type="submit">Preparar fileira</button>
           </form>
         </div>
-        <p class="layout-toolbar-hint">Pinça para zoom. Arraste para mover. Use ⊞ Fileira para várias mesas de uma vez.</p>
+        <p class="layout-toolbar-hint">Pinça para zoom. Arraste para mover. Use Fileira para várias mesas de uma vez.</p>
       </aside>
 
       <section class="panel layout-canvas-shell">
         <div class="layout-canvas-viewport" data-layout-viewport>
           <div class="layout-zoom-controls" data-layout-zoom-controls>
-            <button class="layout-zoom-btn" type="button" data-layout-zoom="out" aria-label="Diminuir zoom">−</button>
+            <button class="layout-zoom-btn" type="button" data-layout-zoom="out" aria-label="Diminuir zoom">{{icon "zoom-out"}}</button>
             <span data-layout-zoom-label>100%</span>
-            <button class="layout-zoom-btn" type="button" data-layout-zoom="in" aria-label="Aumentar zoom">+</button>
-            <button class="layout-zoom-btn" type="button" data-layout-zoom="reset" aria-label="Resetar zoom">⊙</button>
+            <button class="layout-zoom-btn" type="button" data-layout-zoom="in" aria-label="Aumentar zoom">{{icon "zoom-in"}}</button>
+            <button class="layout-zoom-btn" type="button" data-layout-zoom="reset" aria-label="Resetar zoom">{{icon "zoom-reset"}}</button>
           </div>
           <svg class="layout-canvas" data-layout-canvas viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Canvas do layout">
             <defs>
@@ -151,7 +151,7 @@
                   <span class="layout-color-preview" data-layout-color-preview aria-hidden="true"></span>
                   <span data-layout-color-label>Usar cor do garçom</span>
                 </button>
-                <button type="button" class="layout-color-clear" data-layout-color-clear hidden title="Remover cor personalizada" aria-label="Remover cor personalizada">×</button>
+                <button type="button" class="layout-color-clear" data-layout-color-clear hidden title="Remover cor personalizada" aria-label="Remover cor personalizada">{{icon "close"}}</button>
               </div>
               <div class="layout-color-swatches-panel" data-layout-color-panel hidden>
                 <div class="layout-color-swatches" data-layout-color-swatches role="listbox" aria-label="Cor da identificação"></div>
@@ -178,13 +178,13 @@
     </div>
 
     <div class="layout-float-dock" data-layout-float-dock>
-      <button class="layout-dock-btn active" type="button" data-layout-tool="select" aria-label="Selecionar">↖</button>
-      <button class="layout-dock-btn" type="button" data-layout-tool="table_round" aria-label="Mesa redonda">○</button>
-      <button class="layout-dock-btn" type="button" data-layout-tool="table_rect" aria-label="Mesa retangular">▭</button>
-      <button class="layout-dock-btn" type="button" data-layout-sheet-open="row" aria-label="Fileira de mesas">⊞</button>
-      <button class="layout-dock-btn" type="button" data-layout-tool="marker" aria-label="Área neutra">▢</button>
-      <button class="layout-dock-btn" type="button" data-layout-sheet-open="props" aria-label="Editar item">✎</button>
-      <button class="layout-dock-btn" type="button" data-layout-sheet-open="menu" aria-label="Mais opções">⋯</button>
+      <button class="layout-dock-btn active" type="button" data-layout-tool="select" aria-label="Selecionar">{{icon "select"}}</button>
+      <button class="layout-dock-btn" type="button" data-layout-tool="table_round" aria-label="Mesa redonda">{{icon "table-round"}}</button>
+      <button class="layout-dock-btn" type="button" data-layout-tool="table_rect" aria-label="Mesa retangular">{{icon "table-rect"}}</button>
+      <button class="layout-dock-btn" type="button" data-layout-sheet-open="row" aria-label="Fileira de mesas">{{icon "table-row"}}</button>
+      <button class="layout-dock-btn" type="button" data-layout-tool="marker" aria-label="Área neutra">{{icon "marker"}}</button>
+      <button class="layout-dock-btn" type="button" data-layout-sheet-open="props" aria-label="Editar item">{{icon "edit"}}</button>
+      <button class="layout-dock-btn" type="button" data-layout-sheet-open="menu" aria-label="Mais opções">{{icon "more"}}</button>
     </div>
 
     <div class="layout-float-sheet" data-layout-sheet hidden>
@@ -192,7 +192,7 @@
       <div class="layout-float-sheet-panel">
         <header class="layout-float-sheet-header">
           <strong data-layout-sheet-title>Editar item</strong>
-          <button class="layout-float-btn" type="button" data-layout-sheet-close aria-label="Fechar">×</button>
+          <button class="layout-float-btn" type="button" data-layout-sheet-close aria-label="Fechar">{{icon "close"}}</button>
         </header>
         <div class="layout-float-sheet-body" data-layout-sheet-body></div>
       </div>

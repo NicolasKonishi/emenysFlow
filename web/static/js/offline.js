@@ -400,7 +400,8 @@
       const required = Number(quantity.max || quantity.value || 0);
       const actions = document.createElement("div");
       actions.className = "mobile-quick-actions";
-      actions.innerHTML = '<button type="button" class="button primary" data-quick-complete>✓ Concluído</button><button type="button" class="button danger" data-quick-missing>Falta quantidade</button><div class="mobile-missing-editor" hidden><label>Quanto falta?<input type="number" min="1" step="1" required></label><button type="button" class="button danger" data-quick-missing-save>Confirmar falta</button></div><small aria-live="polite"></small>';
+      const checkIcon = window.emenysIcon ? window.emenysIcon("check") : "";
+      actions.innerHTML = `<button type="button" class="button primary" data-quick-complete>${checkIcon} Concluído</button><button type="button" class="button danger" data-quick-missing>Falta quantidade</button><div class="mobile-missing-editor" hidden><label>Quanto falta?<input type="number" min="1" step="1" required></label><button type="button" class="button danger" data-quick-missing-save>Confirmar falta</button></div><small aria-live="polite"></small>`;
       form.before(actions);
       const status = actions.querySelector("small");
       const editor = actions.querySelector(".mobile-missing-editor");
@@ -644,7 +645,7 @@
         const link = document.createElement("a");
         link.className = "text-link";
         link.href = `/layouts/${id}`;
-        link.textContent = `${eventField(layout, "name", "Name") || "Layout"} →`;
+        link.innerHTML = `${eventField(layout, "name", "Name") || "Layout"} ${window.emenysIcon ? window.emenysIcon("arrow") : ""}`;
         row.append(link);
         list.append(row);
       });

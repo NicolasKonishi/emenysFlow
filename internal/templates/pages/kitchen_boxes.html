@@ -1,13 +1,13 @@
 {{define "content"}}
 <div class="page-wrap">
-  <header class="page-header"><div><a class="back-link" href="/inventory">← Voltar ao estoque</a><span class="eyebrow">Armazenamento da cozinha</span><h1>Caixas das cozinheiras</h1><p>Abra uma caixa para conferir, adicionar, editar ou remover seu conteúdo.</p></div></header>
+  <header class="page-header"><div><a class="back-link" href="/inventory">{{icon "back"}} Voltar ao estoque</a><span class="eyebrow">Armazenamento da cozinha</span><h1>Caixas das cozinheiras</h1><p>Abra uma caixa para conferir, adicionar, editar ou remover seu conteúdo.</p></div></header>
   {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
   <section class="kitchen-box-grid">
     {{range .KitchenBoxes}}
     <a class="kitchen-box-card panel" href="/inventory/kitchen-boxes/box/{{.ID}}">
-      <div class="kitchen-box-icon">▣</div>
+      <div class="kitchen-box-icon">{{icon "layouts"}}</div>
       <div><span class="eyebrow">{{.KitchenCookName}}</span><h2>Caixa da cozinheira</h2><p>{{.ItemCount}} tipos · {{number .TotalQuantity}} itens armazenados</p></div>
-      <span class="kitchen-box-open">Abrir →</span>
+      <span class="kitchen-box-open">Abrir {{icon "arrow"}}</span>
     </a>
     {{else}}<div class="empty-state panel span-all"><strong>Nenhuma caixa cadastrada.</strong></div>{{end}}
   </section>

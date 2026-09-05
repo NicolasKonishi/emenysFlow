@@ -10,9 +10,12 @@
   </div>
 
   <header class="page-header layout-planner-header">
-    <div>
+    <div class="page-brand">
+      <span class="brand-mark large">{{icon "mark"}}</span>
+      <div>
       {{if eq .LayoutMode "event"}}{{if eq .Workspace "offline"}}<a class="back-link" href="/offline">{{icon "back"}} Checklists salvas</a>{{else}}<a class="back-link" href="/events/{{.Event.ID}}">{{icon "back"}} Voltar ao evento</a>{{end}}<span class="eyebrow">{{.Event.ClientName}} · {{.Event.Venue}}</span><h1>Layout do salão</h1><p>Monte as mesas, atribua garçons e exporte para a equipe.</p>
-      {{else}}{{if .IsEdit}}<a class="back-link" href="/layouts">{{icon "back"}} Todos os layouts</a>{{else}}<a class="back-link" href="/layouts">{{icon "back"}} Voltar</a>{{end}}<span class="eyebrow">Layout avulso</span><h1>{{if .IsEdit}}{{.StandaloneLayout.Name}}{{else}}Novo layout avulso{{end}}</h1><h2>Informe os garçons, desenhe o salão e exporte sem precisar de um evento cadastrado.</h2>{{end}}
+      {{else}}{{if .IsEdit}}<a class="back-link" href="/layouts">{{icon "back"}} Todos os layouts</a>{{else}}<a class="back-link" href="/layouts">{{icon "back"}} Voltar</a>{{end}}<span class="eyebrow">{{if eq .Workspace "offline"}}Modo offline{{else}}Layout avulso{{end}}</span><h1>{{if .IsEdit}}{{.StandaloneLayout.Name}}{{else}}Novo layout avulso{{end}}</h1><h2>Informe os garçons, desenhe o salão e exporte sem precisar de um evento cadastrado.</h2>{{end}}
+      </div>
     </div>
     <div class="layout-planner-actions layout-desktop-actions">
       <button class="button secondary" type="button" data-layout-fullscreen>{{icon "fullscreen"}} Tela cheia</button>

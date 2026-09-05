@@ -1,7 +1,15 @@
 {{define "content"}}
 <div class="page-wrap operation-page {{if eq .Operation.Stage "loading"}}loading-operation{{end}}">
   <header class="page-header">
-    <div><a class="back-link" href="/events/{{.Event.ID}}/operation">{{icon "back"}} Voltar à checklist</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span><h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1><p>{{.Event.Name}} · {{.Event.Venue}}</p></div>
+    <div class="page-brand">
+      <span class="brand-mark large">{{icon "mark"}}</span>
+      <div>
+        <a class="back-link" href="/events/{{.Event.ID}}/operation">{{icon "back"}} Voltar à checklist</a>
+        <span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span>
+        <h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1>
+        <p>{{.Event.Name}} · {{.Event.Venue}}</p>
+      </div>
+    </div>
     <span class="badge {{statusClass .Event.Status}}">{{statusLabel .Event.Status}}</span>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
@@ -25,7 +33,7 @@
             <div class="mobile-missing-editor" data-loading-missing-editor {{if not (eq .LoadingDecision "missing")}}hidden{{end}}><label>Quantidade que falta<input type="number" min="1" max="{{inputNumber .RequiredQuantity}}" step="1" value="{{if eq .LoadingDecision "missing"}}{{inputNumber .LoadingMissingQuantity}}{{else}}1{{end}}" data-loading-missing-quantity></label><button class="button danger" type="button" data-loading-missing-confirm>Confirmar falta</button></div>
             <p class="mobile-loading-error" data-loading-error role="alert"></p>
           </article>
-          {{else}}<div class="empty-state panel"><strong>Nenhum item liberado para carregamento.</strong><p>Conclua a separação e a conferência primeiro.</p></div>{{end}}
+          {{else}}<div class="empty-state panel">{{icon "checklists"}}<strong>Nenhum item liberado para carregamento.</strong><p>Conclua a separação e a conferência primeiro.</p></div>{{end}}
         </div>
       </section>
       {{end}}

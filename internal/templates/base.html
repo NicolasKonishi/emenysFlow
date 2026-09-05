@@ -9,11 +9,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon-512.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/icons/icon-512.png">
-  <link rel="stylesheet" href="/static/css/app.css?v=52">
+  <link rel="stylesheet" href="/static/css/app.css?v=53">
   <script defer src="/static/js/icons.js?v=2"></script>
   <script defer src="/static/js/app.js?v=15"></script>
   <script defer src="/static/js/layout-editor.js?v=34"></script>
-  <script defer src="/static/js/offline.js?v=13"></script>
+  <script defer src="/static/js/offline.js?v=14"></script>
 </head>
 <body {{if .User.ID}}class="app-shell workspace-{{if .Workspace}}{{.Workspace}}{{else}}online{{end}}" data-workspace="{{if .Workspace}}{{.Workspace}}{{else}}online{{end}}"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
   {{if .User.ID}}
@@ -36,7 +36,11 @@
       <a href="/offline" {{if eq .CurrentNav "offline"}}aria-current="page"{{end}}><span class="nav-icon">{{icon "checklists"}}</span>Checklists</a>
       <a href="/layouts" {{if eq .CurrentNav "layouts"}}aria-current="page"{{end}}><span class="nav-icon">{{icon "layouts"}}</span>Layouts</a>
     </nav>
-    <p class="workspace-hint nav-offline">Sem conexão com o emenysFlow. Só checklists e layout ficam disponíveis.</p>
+    <p class="workspace-hint nav-offline">Só checklists e layout ficam disponíveis no modo offline.</p>
+    <div class="workspace-switch nav-offline">
+      <span class="eyebrow">Sistema completo</span>
+      <button type="button" class="button ghost" data-open-online>Abrir modo online</button>
+    </div>
     <div class="sidebar-foot">
       <span class="avatar">{{slice .User.Name 0 1}}</span>
       <span class="user-copy"><strong>{{.User.Name}}</strong><small>{{if eq .User.Role "admin"}}Administrador{{else if eq .User.Role "organizer"}}Organizador{{else}}Funcionário operacional{{end}}</small></span>

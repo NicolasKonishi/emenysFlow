@@ -9,11 +9,23 @@ import (
 
 const workspaceCookie = "buffet_workspace"
 
-func workspaceFor(_ *http.Request, nav string) string {
+func workspaceFor(request *http.Request, nav string) string {
 	if nav == "offline" {
 		return "offline"
 	}
+	if workspaceFromRequest(request) == "offline" && offlineCapableNav(nav) {
+		return "offline"
+	}
 	return "online"
+}
+
+func offlineCapableNav(nav string) bool {
+	switch nav {
+	case "layouts", "offline":
+		return true
+	default:
+		return false
+	}
 }
 
 func workspaceFromRequest(request *http.Request) string {

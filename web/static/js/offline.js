@@ -14,6 +14,7 @@
   const HEALTH_URL = "/api/health";
   const WORKSPACE_KEY = "buffetflow_workspace";
   const WAS_OFFLINE_KEY = "buffetflow_was_offline";
+  const STAY_OFFLINE_KEY = "buffetflow_stay_offline";
   const PROBE_MS = 8000;
   let serviceReachable = null;
   let reconnectDismissed = false;
@@ -135,6 +136,31 @@
     });
   }
 
+  function cookieWorkspace() {
+    const match = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith("buffet_workspace="));
+    return (match || "").split("=")[1] || "";
+  }
+
+  function wantsOfflineWorkspace() {
+    return currentWorkspace() === "offline"
+      || localStorage.getItem(WORKSPACE_KEY) === "offline"
+      || cookieWorkspace() === "offline";
+  }
+
+  function stayOfflineChosen() {
+    return sessionStorage.getItem(STAY_OFFLINE_KEY) === "1" || reconnectDismissed;
+  }
+
+  function chooseStayOffline() {
+    reconnectDismissed = true;
+    sessionStorage.setItem(STAY_OFFLINE_KEY, "1");
+  }
+
+  function clearStayOffline() {
+    reconnectDismissed = false;
+    sessionStorage.removeItem(STAY_OFFLINE_KEY);
+  }
+
   function onOfflineHub() {
     const path = location.pathname;
     return path === "/offline" || path.endsWith("/offline.html") || Boolean(document.querySelector("[data-offline-home], [data-offline-hub]"));
@@ -153,6 +179,7 @@
   }
 
   function openOnlineMode() {
+    clearStayOffline();
     reconnectDismissed = true;
     clearDisconnected();
     persistWorkspace("online");
@@ -194,7 +221,7 @@
     if (!reachable) {
       failCount += 1;
       if (failCount < 2 && previous !== false && navigator.onLine) return reachable;
-      reconnectDismissed = false;
+      clearStayOffline();
       markDisconnected();
       showReconnectBanner(false);
       persistWorkspace("offline");
@@ -206,10 +233,14 @@
       return reachable;
     }
     failCount = 0;
-    if (wasDisconnected() && onOfflineHub() && !reconnectDismissed) {
+    if (wasDisconnected() && onOfflineHub() && !stayOfflineChosen()) {
       persistWorkspace("offline");
       showReconnectBanner(true);
       await updateStatus("Serviço online — continue offline ou abra o sistema completo", "online");
+    } else if (isOfflineCapablePath() && wantsOfflineWorkspace()) {
+      persistWorkspace("offline");
+      showReconnectBanner(false);
+      await updateStatus("Modo offline neste aparelho", reachable ? "online" : "offline");
     } else {
       if (!onOfflineHub()) clearDisconnected();
       persistWorkspace("online");
@@ -734,7 +765,8 @@
     if (event.target.closest("[data-sync-now]")) syncOperations(true);
     if (event.target.closest("[data-close-conflicts]")) document.querySelector("[data-conflict-panel]").hidden = true;
     if (event.target.closest("[data-stay-offline]")) {
-      reconnectDismissed = true;
+      chooseStayOffline();
+      persistWorkspace("offline");
       showReconnectBanner(false);
     }
     if (event.target.closest("[data-open-online]")) {

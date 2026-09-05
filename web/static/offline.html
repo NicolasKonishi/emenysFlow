@@ -8,9 +8,9 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/static/icons/icon-512.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/icons/icon-512.png">
-  <link rel="stylesheet" href="/static/css/app.css?v=52">
+  <link rel="stylesheet" href="/static/css/app.css?v=53">
   <script defer src="/static/js/icons.js?v=2"></script>
-  <script defer src="/static/js/offline.js?v=13"></script>
+  <script defer src="/static/js/offline.js?v=14"></script>
 </head>
 <body class="offline-shell workspace-offline" data-workspace="offline">
   <header class="offline-topbar">
@@ -39,12 +39,14 @@
         <span class="brand-mark large"><img src="/static/icons/emenys-mark-ink.png" alt="" width="40" height="44"></span>
         <div>
           <span class="eyebrow">Modo offline</span>
-          <h1>Checklists e layout neste aparelho</h1>
-          <p>Sem conexão com o emenysFlow. Use as checklists e os layouts salvos. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
-        </div>
+        <h1>Checklists e layout neste aparelho</h1>
+        <p>Use as checklists e os layouts salvos neste aparelho. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
       </div>
-    </header>
-    <div class="alert info">Sem conexão com o emenysFlow. Use as checklists e os layouts salvos. Quando o serviço voltar, você escolhe se abre o sistema completo.</div>
+    </div>
+    <div class="page-header-actions">
+      <button type="button" class="button ghost" data-open-online>Abrir sistema completo</button>
+    </div>
+  </header>
     <section class="panel sync-preference" data-sync-preference>
       <div>
         <span class="eyebrow">Sincronização</span>

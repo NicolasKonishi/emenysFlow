@@ -6,8 +6,11 @@
       <div>
         <span class="eyebrow">Modo offline</span>
         <h1>Checklists e layout das festas</h1>
-        <p>Sem conexão com o emenysFlow. Use as checklists e o layout salvos neste aparelho. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
+        <p>Use as checklists e o layout salvos neste aparelho. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
       </div>
+    </div>
+    <div class="page-header-actions">
+      <button type="button" class="button ghost" data-open-online>Abrir sistema completo</button>
     </div>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}
@@ -86,7 +89,7 @@
       {{end}}
     </tbody></table></div>
     {{else}}
-    <div class="empty-state compact"><strong>Nenhum layout avulso ainda</strong><p>Crie uma planta independente ou abra o layout de um evento salvo.</p></div>
+    <div class="empty-state compact">{{icon "layouts"}}<strong>Nenhum layout avulso ainda</strong><p>Crie uma planta independente ou abra o layout de um evento salvo.</p></div>
     {{end}}
     <div class="offline-layout-foot"><a class="text-link" href="/layouts">Ver todos os layouts {{icon "arrow"}}</a></div>
   </section>

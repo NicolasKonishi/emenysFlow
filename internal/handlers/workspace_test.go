@@ -30,8 +30,11 @@ func TestWorkspaceForUsesNavAndCookie(t *testing.T) {
 		t.Fatalf("layouts should stay online on a live request, got %q", got)
 	}
 	request.AddCookie(&http.Cookie{Name: workspaceCookie, Value: "offline"})
-	if got := workspaceFor(request, "layouts"); got != "online" {
-		t.Fatalf("layouts served by the server should be online even with offline cookie, got %q", got)
+	if got := workspaceFor(request, "layouts"); got != "offline" {
+		t.Fatalf("layouts in the offline workspace should keep the offline chrome, got %q", got)
+	}
+	if got := workspaceFor(request, "dashboard"); got != "online" {
+		t.Fatalf("full-system pages should leave the offline workspace, got %q", got)
 	}
 }
 
@@ -160,11 +163,14 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("GET /layouts status %d", response.StatusCode)
 	}
-	if !strings.Contains(string(layoutsBody), "workspace-online") {
-		t.Fatal("live layouts page should render the full online workspace")
+	if !strings.Contains(string(layoutsBody), "workspace-offline") {
+		t.Fatal("layouts opened from the offline workspace should keep the offline interface")
 	}
-	if strings.Contains(string(layoutsBody), "Sem conexão com o emenysFlow. Monte a planta neste aparelho.") {
-		t.Fatal("live layouts page should not use the offline-only copy")
+	if !strings.Contains(string(layoutsBody), "Modo offline") {
+		t.Fatal("offline layouts page should use the offline heading")
+	}
+	if strings.Contains(string(layoutsBody), `class="nav-list nav-online"`) && !strings.Contains(string(layoutsBody), "workspace-offline") {
+		t.Fatal("offline layouts should not present the full online navigation")
 	}
 	if strings.Contains(string(layoutsBody), "Não foi possível concluir a operação.") {
 		t.Fatal("live layouts page should not fail when listing standalone floor layouts")

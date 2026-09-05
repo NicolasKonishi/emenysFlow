@@ -52,8 +52,10 @@
 .offline-page { position:relative; z-index:1; width:min(1100px,calc(100% - 28px)); margin:0 auto; padding:28px 0 48px; }
 .offline-page > .page-header { margin-bottom:18px; }
 .offline-page h1 { margin:3px 0; }
-.page-brand { display:flex; align-items:flex-start; gap:16px; }
+.page-brand { display:flex; align-items:flex-start; gap:16px; flex:1; min-width:0; }
 .page-brand .brand-mark { margin-top:2px; }
+.page-brand .back-link { margin-bottom:10px; }
+.page-header:has(.page-brand) { align-items:flex-start; }
 .offline-card-icon { display:grid; place-items:center; width:47px; height:50px; border-radius:11px; color:#0a0a0a; background:#ffffff; }
 .offline-card-icon .icon { width:20px; height:20px; }
 .offline-event-card { margin:0; padding:18px; border:1px solid var(--line); border-radius:13px; background:var(--surface); backdrop-filter:blur(16px); }
@@ -235,6 +237,7 @@ tr:hover td { background: rgba(255,255,255,.04); }
 .empty-state { display: grid; justify-items: center; padding: 58px 25px; color: var(--muted); text-align: center; }
 .empty-state > span { margin-bottom: 13px; font-size: 2rem; }
 .empty-state > .icon { width: 36px; height: 36px; margin-bottom: 13px; color: #f0f0f0; }
+.empty-state.compact > .icon { width: 28px; height: 28px; margin-bottom: 8px; }
 .empty-state strong { color: var(--ink); }
 .empty-state p { margin: 7px 0 0; font-size: .82rem; }
 
@@ -751,7 +754,8 @@ body.layout-sheet-open { overflow:hidden; }body.layout-fullscreen-active .sideba
 .workspace-card h2 { margin:0; }
 .workspace-card p { margin:0; }
 .workspace-card ul { margin:0; padding-left:18px; color:var(--muted); font-size:.82rem; line-height:1.55; }
-.workspace-switch { display:grid; gap:8px; margin-top:28px; padding:16px 8px 0; border-top:1px solid rgba(255,255,255,.12); }
+.workspace-switch { display:grid; gap:8px; margin-top:18px; padding:16px 8px 0; border-top:1px solid rgba(255,255,255,.12); }
+.workspace-online .workspace-switch.nav-offline { display: none; }
 .workspace-switch .eyebrow { color:#b3b3b3; }
 .workspace-switch .button { justify-content:center; }
 .workspace-switch .button.ghost { color:#d8d8d8; }

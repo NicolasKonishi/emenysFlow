@@ -1,15 +1,15 @@
 const WAITER_COLORS = [
-  "#7ec8ff", "#ff8fab", "#7dffb3", "#ffd166", "#c084fc",
-  "#fb923c", "#67e8f9", "#f472b6", "#86efac", "#facc15",
-  "#818cf8", "#fb7185", "#2dd4bf", "#e879f9", "#94a3b8",
+  "#1d4ed8", "#dc2626", "#eab308", "#16a34a",
+  "#ea580c", "#7c3aed", "#0891b2", "#db2777",
+  "#65a30d", "#b45309", "#c026d3", "#0f766e",
 ];
-const SHADOW_WAITER_COLOR = "#e7d7a7";
+const SHADOW_WAITER_COLOR = "#c9a227";
 
 const LAYOUT_PALETTE = [
-  "#7ec8ff", "#ff8fab", "#7dffb3", "#ffd166", "#c084fc",
-  "#fb923c", "#67e8f9", "#f472b6", "#86efac", "#facc15",
-  "#818cf8", "#fb7185", "#2dd4bf", "#e879f9", "#ffffff",
-  "#f2f2f2", "#d9d9d9", "#a6a6a6", "#737373", "#404040",
+  "#1d4ed8", "#dc2626", "#eab308", "#16a34a",
+  "#ea580c", "#7c3aed", "#0891b2", "#db2777",
+  "#65a30d", "#b45309", "#c026d3", "#0f766e",
+  "#ffffff", "#f2f2f2", "#d9d9d9", "#a6a6a6", "#737373", "#404040",
 ];
 
 const LAYOUT_THEME = {
@@ -61,6 +61,22 @@ function layoutAccentForElement(item, registry) {
   return LAYOUT_THEME.glassStroke;
 }
 
+function hasWaiterColor(accent) {
+  return Boolean(accent) && accent !== LAYOUT_THEME.glassStroke && accent !== "rgba(255,255,255,0.38)";
+}
+
+function tableLabelAttrs(extra = {}) {
+  return {
+    "text-anchor": "middle",
+    "dominant-baseline": "middle",
+    fill: LAYOUT_THEME.ink,
+    stroke: "rgba(0,0,0,0.62)",
+    "stroke-width": "3",
+    "paint-order": "stroke",
+    ...extra,
+  };
+}
+
 function svgEl(name, attrs) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", name);
   Object.entries(attrs).forEach(([key, value]) => {
@@ -90,6 +106,17 @@ function appendGlassShape(group, item, registry, options = {}) {
       filter: ghost ? "" : "url(#layout-glass-shadow)",
       "fill-opacity": ghost ? "0.72" : "1",
     }));
+    if (hasWaiterColor(accent)) {
+      group.append(svgEl("circle", {
+        "data-layout-shape": "wash",
+        cx,
+        cy,
+        r: Math.max(6, radius - 1),
+        fill: accent,
+        "fill-opacity": ghost ? "0.32" : "0.62",
+        "pointer-events": "none",
+      }));
+    }
     group.append(svgEl("ellipse", {
       "data-layout-shape": "highlight",
       cx,
@@ -103,10 +130,10 @@ function appendGlassShape(group, item, registry, options = {}) {
       "data-layout-shape": "ring",
       cx,
       cy,
-      r: Math.max(6, radius - 3),
+      r: Math.max(6, radius - 4),
       fill: "none",
       stroke: accent,
-      "stroke-width": "2.4",
+      "stroke-width": hasWaiterColor(accent) ? "5" : "2.4",
       "pointer-events": "none",
     }));
     return;
@@ -127,6 +154,19 @@ function appendGlassShape(group, item, registry, options = {}) {
     filter: ghost || isMarker ? "" : "url(#layout-glass-shadow)",
   }));
   if (!isMarker) {
+    if (hasWaiterColor(accent)) {
+      group.append(svgEl("rect", {
+        "data-layout-shape": "wash",
+        x: item.x + 1,
+        y: item.y + 1,
+        width: Math.max(0, item.width - 2),
+        height: Math.max(0, item.height - 2),
+        rx: "9",
+        fill: accent,
+        "fill-opacity": ghost ? "0.32" : "0.62",
+        "pointer-events": "none",
+      }));
+    }
     group.append(svgEl("rect", {
       "data-layout-shape": "highlight",
       x: item.x + 8,
@@ -139,14 +179,14 @@ function appendGlassShape(group, item, registry, options = {}) {
     }));
     group.append(svgEl("rect", {
       "data-layout-shape": "ring",
-      x: item.x + 3,
-      y: item.y + 3,
-      width: Math.max(0, item.width - 6),
-      height: Math.max(0, item.height - 6),
+      x: item.x + 4,
+      y: item.y + 4,
+      width: Math.max(0, item.width - 8),
+      height: Math.max(0, item.height - 8),
       rx: "8",
       fill: "none",
       stroke: accent,
-      "stroke-width": "2.2",
+      "stroke-width": hasWaiterColor(accent) ? "5" : "2.2",
       "pointer-events": "none",
     }));
   }
@@ -154,6 +194,7 @@ function appendGlassShape(group, item, registry, options = {}) {
 
 function syncGlassGeometry(group, element) {
   const body = group.querySelector('[data-layout-shape="body"]');
+  const wash = group.querySelector('[data-layout-shape="wash"]');
   const highlight = group.querySelector('[data-layout-shape="highlight"]');
   const ring = group.querySelector('[data-layout-shape="ring"]');
   const cx = element.x + element.width / 2;
@@ -165,10 +206,15 @@ function syncGlassGeometry(group, element) {
       body.setAttribute("cy", String(cy));
       body.setAttribute("r", String(radius));
     }
+    if (wash) {
+      wash.setAttribute("cx", String(cx));
+      wash.setAttribute("cy", String(cy));
+      wash.setAttribute("r", String(Math.max(6, radius - 1)));
+    }
     if (ring) {
       ring.setAttribute("cx", String(cx));
       ring.setAttribute("cy", String(cy));
-      ring.setAttribute("r", String(Math.max(6, radius - 3)));
+      ring.setAttribute("r", String(Math.max(6, radius - 4)));
     }
     if (highlight) {
       highlight.setAttribute("cx", String(cx));
@@ -184,11 +230,17 @@ function syncGlassGeometry(group, element) {
     body.setAttribute("width", String(element.width));
     body.setAttribute("height", String(element.height));
   }
+  if (wash) {
+    wash.setAttribute("x", String(element.x + 1));
+    wash.setAttribute("y", String(element.y + 1));
+    wash.setAttribute("width", String(Math.max(0, element.width - 2)));
+    wash.setAttribute("height", String(Math.max(0, element.height - 2)));
+  }
   if (ring) {
-    ring.setAttribute("x", String(element.x + 3));
-    ring.setAttribute("y", String(element.y + 3));
-    ring.setAttribute("width", String(Math.max(0, element.width - 6)));
-    ring.setAttribute("height", String(Math.max(0, element.height - 6)));
+    ring.setAttribute("x", String(element.x + 4));
+    ring.setAttribute("y", String(element.y + 4));
+    ring.setAttribute("width", String(Math.max(0, element.width - 8)));
+    ring.setAttribute("height", String(Math.max(0, element.height - 8)));
   }
   if (highlight) {
     highlight.setAttribute("x", String(element.x + 8));
@@ -1271,27 +1323,21 @@ function initializeLayoutEditor(root = document) {
     const centerX = spec.x + spec.width / 2;
     const centerY = spec.y + spec.height / 2;
     appendGlassShape(group, spec, waiterRegistry, { ghost: true, waiter });
-    const label = svgEl("text", {
+    const label = svgEl("text", tableLabelAttrs({
       x: centerX,
       y: centerY - (waiter ? 6 : 0),
-      "text-anchor": "middle",
-      "dominant-baseline": "middle",
-      fill: LAYOUT_THEME.ink,
       "font-size": "13",
       "font-weight": "700",
-    });
+    }));
     label.textContent = spec.label;
     group.append(label);
     if (waiter) {
-      const waiterLabel = svgEl("text", {
+      const waiterLabel = svgEl("text", tableLabelAttrs({
         x: centerX,
         y: centerY + 12,
-        "text-anchor": "middle",
-        "dominant-baseline": "middle",
-        fill: layoutColorForWaiter(waiter, waiterRegistry),
         "font-size": "11",
-        "font-weight": "600",
-      });
+        "font-weight": "700",
+      }));
       waiterLabel.textContent = waiter;
       group.append(waiterLabel);
     }
@@ -1476,32 +1522,35 @@ function initializeLayoutEditor(root = document) {
     const waiter = (item.waiter || "").trim();
     const centerX = item.x + item.width / 2;
     const centerY = item.y + item.height / 2;
-    const accent = layoutAccentForElement(item, waiterRegistry);
 
     if (title) {
-      const label = svgEl("text", {
-        x: centerX,
-        y: centerY - (waiter ? 6 : 0),
-        "text-anchor": "middle",
-        "dominant-baseline": "middle",
-        fill: item.type === "marker" ? LAYOUT_THEME.muted : LAYOUT_THEME.ink,
-        "font-size": item.type === "marker" ? "12" : "13",
-        "font-weight": item.type === "marker" ? "600" : "700",
-      });
+      const label = svgEl("text", item.type === "marker"
+        ? {
+            x: centerX,
+            y: centerY - (waiter ? 6 : 0),
+            "text-anchor": "middle",
+            "dominant-baseline": "middle",
+            fill: LAYOUT_THEME.muted,
+            "font-size": "12",
+            "font-weight": "600",
+          }
+        : tableLabelAttrs({
+            x: centerX,
+            y: centerY - (waiter ? 6 : 0),
+            "font-size": "13",
+            "font-weight": "700",
+          }));
       label.textContent = title;
       group.append(label);
     }
 
     if (waiter && item.type !== "marker") {
-      const waiterLabel = svgEl("text", {
+      const waiterLabel = svgEl("text", tableLabelAttrs({
         x: centerX,
         y: centerY + 12,
-        "text-anchor": "middle",
-        "dominant-baseline": "middle",
-        fill: accent,
         "font-size": "11",
-        "font-weight": "600",
-      });
+        "font-weight": "700",
+      }));
       waiterLabel.textContent = waiter;
       group.append(waiterLabel);
     }

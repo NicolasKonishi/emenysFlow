@@ -94,6 +94,17 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 		result.Version, err = a.store.SaveOperationalQuantity(r.Context(), eventID, request.EntityID, stage, quantity, notes, user.ID, request.BaseVersion)
 	case "mark_shortage":
 		shortage := models.ChecklistShortage{EventID: eventID, ChecklistItemID: request.EntityID, MissingQuantity: numberValue(payload["missing_quantity"]), Reason: stringValue(payload["reason"]), ResolutionType: stringValue(payload["resolution_type"]), ResponsibleName: stringValue(payload["responsible_name"]), SupplierName: stringValue(payload["supplier_name"]), Notes: stringValue(payload["notes"])}
+		if shortage.Reason == "" {
+			shortage.Reason = "Não tem no estoque"
+		}
+		if shortage.ResolutionType == "" {
+			shortage.ResolutionType = "other"
+		}
+		if shortage.MissingQuantity <= 0 {
+			if required, lookupErr := a.store.ChecklistItemRequired(r.Context(), eventID, request.EntityID); lookupErr == nil {
+				shortage.MissingQuantity = required
+			}
+		}
 		if value := stringValue(payload["due_at"]); value != "" {
 			shortage.DueAt, _ = time.ParseInLocation("2006-01-02T15:04", value, a.location)
 		}

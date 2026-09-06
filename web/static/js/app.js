@@ -213,18 +213,20 @@ function initializePDFSharing(root = document) {
 }
 
 function initializeMobileLoading(root = document) {
-  if (!window.matchMedia("(max-width: 820px)").matches) return;
-  root.querySelectorAll("[data-mobile-loading-list]").forEach((list) => {
-    if (list.dataset.initialized === "true") return;
-    list.dataset.initialized = "true";
-    const cards = Array.from(list.querySelectorAll("[data-loading-item]"));
+  initializeSimpleChecklist(root);
+}
+
+function initializeSimpleChecklist(root = document) {
+  root.querySelectorAll("[data-simple-checklist]").forEach((list) => {
+    if (list.dataset.simpleInitialized === "true") return;
+    list.dataset.simpleInitialized = "true";
+    const cards = Array.from(list.querySelectorAll("[data-simple-item]"));
     const form = list.closest("form");
     const finalizeButton = form ? form.querySelector("[data-loading-finalize]") : null;
     const progress = list.querySelector("[data-loading-progress]");
-    const formatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 
     const updateProgress = () => {
-      const decided = cards.filter((card) => card.dataset.decision === "complete" || card.dataset.decision === "missing").length;
+      const decided = cards.filter((card) => card.dataset.state === "done" || card.dataset.state === "missing").length;
       if (progress) progress.textContent = `${decided} de ${cards.length}`;
       if (finalizeButton && cards.length > 0) {
         finalizeButton.disabled = decided !== cards.length;
@@ -232,56 +234,156 @@ function initializeMobileLoading(root = document) {
       }
     };
 
-    const saveDecision = async (card, decision, missingQuantity) => {
-      const errorMessage = card.querySelector("[data-loading-error]");
-      const controls = card.querySelectorAll("button, input");
-      controls.forEach((control) => { control.disabled = true; });
-      if (errorMessage) errorMessage.textContent = "Salvando…";
-      try {
-        const body = new URLSearchParams({ decision, missing_quantity: String(missingQuantity || 0) });
-        const response = await fetch(card.dataset.saveUrl, { method: "POST", body, credentials: "same-origin" });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Não foi possível salvar.");
+    const setCardState = (card, state, message) => {
+      card.dataset.state = state;
+      if (card.dataset.decision !== undefined) {
+        card.dataset.decision = state === "done" ? "complete" : state === "missing" ? "missing" : "";
+      }
+      card.classList.toggle("is-done", state === "done");
+      card.classList.toggle("is-missing", state === "missing");
+      const status = card.querySelector("[data-simple-status]");
+      if (status) status.textContent = message || (state === "done" ? "Conferido" : state === "missing" ? "Sem estoque" : "");
+      const hiddenQuantity = form ? form.querySelector(`input[name="quantity_${card.dataset.itemId}"]`) : null;
+      if (hiddenQuantity && state === "done") hiddenQuantity.value = card.dataset.required || hiddenQuantity.value;
+      updateProgress();
+    };
 
-        card.dataset.decision = result.decision;
-        card.classList.toggle("is-complete", result.decision === "complete");
-        card.classList.toggle("has-missing", result.decision === "missing");
-        const state = card.querySelector("[data-loading-state]");
-        if (state) state.innerHTML = result.decision === "complete" ? `${window.emenysIcon ? window.emenysIcon("check") : ""} Concluído` : `Falta ${formatter.format(result.missing_quantity)}`;
-        const editor = card.querySelector("[data-loading-missing-editor]");
-        if (editor) editor.hidden = true;
-        const hiddenQuantity = form ? form.querySelector(`input[name="quantity_${card.dataset.itemId}"]`) : null;
-        if (hiddenQuantity) hiddenQuantity.value = result.loaded_quantity;
-        if (errorMessage) errorMessage.textContent = "Salvo";
-        updateProgress();
+    const postAction = async (card, kind) => {
+      if (card.dataset.busy === "1") return;
+      card.dataset.busy = "1";
+      const status = card.querySelector("[data-simple-status]");
+      if (status) status.textContent = navigator.onLine ? "Salvando…" : "Salvando no aparelho…";
+      const required = card.dataset.required || "0";
+      const eventID = Number(list.dataset.eventId || 0);
+      const itemID = Number(card.dataset.itemId || 0);
+      try {
+        if (!navigator.onLine && typeof window.emenysQueueChecklistAction === "function") {
+          await window.emenysQueueChecklistAction({
+            mode: card.dataset.mode,
+            kind,
+            eventID,
+            itemID,
+            stage: card.dataset.stage,
+            required,
+            version: Number(card.dataset.version || 0),
+          });
+          setCardState(card, kind === "missing" ? "missing" : "done", kind === "missing" ? "Sem estoque — no aparelho" : "Conferido — no aparelho");
+          return;
+        }
+        const body = new URLSearchParams();
+        let url = kind === "missing" ? card.dataset.missingUrl : card.dataset.checkUrl;
+        if (card.dataset.mode === "loading-decision") {
+          body.set("decision", kind === "missing" ? "missing" : "complete");
+          body.set("missing_quantity", kind === "missing" ? required : "0");
+          url = card.dataset.saveUrl || url;
+        } else if (kind === "missing") {
+          body.set("missing_quantity", required);
+          body.set("reason", "Não tem no estoque");
+          body.set("resolution_type", "other");
+        } else {
+          body.set("stage", card.dataset.stage || "separation");
+          body.set("quantity", required);
+          body.set("version", card.dataset.version || "0");
+        }
+        const response = await fetch(url, {
+          method: "POST",
+          body,
+          credentials: "same-origin",
+          headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Não foi possível salvar.");
+        if (result.version) card.dataset.version = String(result.version);
+        setCardState(card, kind === "missing" ? "missing" : "done");
       } catch (error) {
-        if (errorMessage) errorMessage.textContent = error.message || "Não foi possível salvar. Tente novamente.";
+        if (status) status.textContent = error.message || "Não foi possível salvar.";
       } finally {
-        controls.forEach((control) => { control.disabled = false; });
+        card.dataset.busy = "";
+        resetSwipe(card);
       }
     };
 
+    const resetSwipe = (card) => {
+      const front = card.querySelector(".simple-check-front");
+      if (front) {
+        front.style.transition = "transform .18s ease";
+        front.style.transform = "translateX(0)";
+      }
+      card.classList.remove("is-swiping-left", "is-swiping-right");
+    };
+
     cards.forEach((card) => {
-      const completeButton = card.querySelector("[data-loading-complete]");
-      const missingToggle = card.querySelector("[data-loading-missing-toggle]");
-      const missingEditor = card.querySelector("[data-loading-missing-editor]");
-      const missingInput = card.querySelector("[data-loading-missing-quantity]");
-      const missingConfirm = card.querySelector("[data-loading-missing-confirm]");
-      if (completeButton) completeButton.addEventListener("click", () => saveDecision(card, "complete", 0));
-      if (missingToggle && missingEditor) missingToggle.addEventListener("click", () => {
-        missingEditor.hidden = !missingEditor.hidden;
-        if (!missingEditor.hidden && missingInput) missingInput.focus();
+      const front = card.querySelector(".simple-check-front");
+      card.querySelector("[data-simple-check]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        postAction(card, "check");
       });
-      if (missingConfirm && missingInput) missingConfirm.addEventListener("click", () => {
-        const missing = Number.parseFloat(missingInput.value);
-        const required = Number.parseFloat(card.dataset.required);
-        const errorMessage = card.querySelector("[data-loading-error]");
-        if (!Number.isFinite(missing) || missing <= 0 || missing > required) {
-          if (errorMessage) errorMessage.textContent = `Informe uma falta entre 0 e ${formatter.format(required)}.`;
+      card.querySelector("[data-simple-missing]")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        postAction(card, "missing");
+      });
+      if (!front) return;
+
+      let pointer = null;
+      const startSwipe = (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        pointer = {
+          id: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          locked: false,
+        };
+        front.style.transition = "none";
+        front.setPointerCapture?.(event.pointerId);
+      };
+      const moveSwipe = (event) => {
+        if (!pointer || event.pointerId !== pointer.id) return;
+        const dx = event.clientX - pointer.x;
+        const dy = event.clientY - pointer.y;
+        if (!pointer.locked) {
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          if (Math.abs(dy) > Math.abs(dx)) {
+            pointer = null;
+            return;
+          }
+          pointer.locked = true;
+          card.dataset.didSwipe = "1";
+        }
+        event.preventDefault();
+        const x = Math.max(-140, Math.min(140, dx));
+        front.style.transform = `translateX(${x}px)`;
+        card.classList.toggle("is-swiping-right", x > 24);
+        card.classList.toggle("is-swiping-left", x < -24);
+      };
+      const endSwipe = (event) => {
+        if (!pointer || event.pointerId !== pointer.id) return;
+        const dx = event.clientX - pointer.x;
+        const swiped = pointer.locked;
+        pointer = null;
+        if (dx >= 72) {
+          postAction(card, "check");
           return;
         }
-        saveDecision(card, "missing", missing);
-      });
+        if (dx <= -72) {
+          postAction(card, "missing");
+          return;
+        }
+        resetSwipe(card);
+        if (!swiped) card.dataset.didSwipe = "";
+      };
+
+      front.addEventListener("pointerdown", startSwipe);
+      front.addEventListener("pointermove", moveSwipe);
+      front.addEventListener("pointerup", endSwipe);
+      front.addEventListener("pointercancel", endSwipe);
+      front.addEventListener("click", (event) => {
+        if (card.dataset.didSwipe !== "1") return;
+        event.preventDefault();
+        event.stopPropagation();
+        card.dataset.didSwipe = "";
+      }, true);
     });
     updateProgress();
   });

@@ -54,6 +54,7 @@ func NewRenderer() *Renderer {
 		"noContainerSection":      noContainerSection,
 		"rechaudContainerID":      rechaudContainerID,
 		"shortageResolutionLabel": shortageResolutionLabel,
+		"itemColor":               itemColor,
 		"icon":                    iconSVG,
 		"eq":                      func(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) },
 		"operationQty": func(item models.ChecklistItem, stage string) float64 {
@@ -125,6 +126,19 @@ func rechaudContainerID(containers []models.ContainerType) int64 {
 		}
 	}
 	return 0
+}
+
+func itemColor(notes string) string {
+	for _, line := range observationLines(notes) {
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) < 5 {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(trimmed), "cor:") {
+			return strings.TrimSpace(trimmed[4:])
+		}
+	}
+	return ""
 }
 
 func shortageResolutionLabel(value string) string {

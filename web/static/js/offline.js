@@ -4,8 +4,23 @@
   const DB_NAME = "buffetflow-offline";
   const DB_VERSION = 2;
   const DEVICE_KEY = "buffetflow_device_id";
+  const SYNC_PREF_KEY = "buffetflow_sync_enabled";
   let registration;
   let synchronizing = false;
+
+  const isSyncEnabled = () => localStorage.getItem(SYNC_PREF_KEY) === "1";
+  const setSyncEnabled = (enabled) => localStorage.setItem(SYNC_PREF_KEY, enabled ? "1" : "0");
+  const canUseOfflineData = () => Boolean(document.querySelector(".app-shell, [data-offline-hub], [data-sync-status-bar], [data-offline-home], [data-download-offline]"));
+  const HEALTH_URL = "/api/health";
+  const WORKSPACE_KEY = "buffetflow_workspace";
+  const WAS_OFFLINE_KEY = "buffetflow_was_offline";
+  const STAY_OFFLINE_KEY = "buffetflow_stay_offline";
+  const PROBE_MS = 8000;
+  let serviceReachable = null;
+  let reconnectDismissed = false;
+  let switchingToOffline = false;
+  let probeTimer = 0;
+  let failCount = 0;
 
   const uuid = () => self.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const deviceID = () => {
@@ -69,15 +84,194 @@
       + photos.filter((item) => ["pending", "syncing", "failed"].includes(item.status)).length;
     const statusBar = document.querySelector("[data-sync-status-bar]");
     if (statusBar) statusBar.hidden = !(resolvedState === "syncing" || resolvedState === "error" || pending > 0);
+    const pendingLabel = document.querySelector("[data-pending-count]");
+    if (pendingLabel) pendingLabel.textContent = pending === 1 ? "1 operação pendente" : `${pending} operações pendentes`;
+    const lastSync = document.querySelector("[data-last-sync]");
+    if (lastSync) {
+      const saved = await getRecord("meta", "last_sync").catch(() => null);
+      lastSync.textContent = saved?.value ? `Último download: ${new Date(saved.value).toLocaleString("pt-BR")}` : "Ainda não salvo neste aparelho";
+    }
+    updateSyncPreferenceStatus(pending);
+  }
+
+  function updateSyncPreferenceStatus(pending = 0) {
+    const status = document.querySelector("[data-sync-preference-status]");
+    if (!status) return;
+    if (!navigator.onLine) {
+      status.textContent = "Sem conexão. As alterações ficam neste aparelho.";
+      return;
+    }
+    if (isSyncEnabled()) {
+      status.textContent = pending > 0
+        ? "Sincronização ligada. As alterações pendentes sobem automaticamente."
+        : "Sincronização ligada. Alterações da checklist e do layout sobem quando houver conexão.";
+      return;
+    }
+    status.textContent = pending > 0
+      ? "Sincronização desligada. Há alterações só neste aparelho — envie se quiser."
+      : "Sincronização automática desligada. Use “Sincronizar agora” só se quiser enviar ao online.";
+  }
+
+  function currentWorkspace() {
+    if (document.body.classList.contains("workspace-offline") || document.querySelector("[data-offline-home]")) return "offline";
+    if (document.body.classList.contains("workspace-online")) return "online";
+    return document.body.dataset.workspace || "";
+  }
+
+  function isOfflineCapablePath(path = location.pathname) {
+    return path === "/offline"
+      || path.startsWith("/layouts")
+      || /\/events\/\d+\/(operation|layout)/.test(path)
+      || path.endsWith("/offline.html");
+  }
+
+  function persistWorkspace(mode) {
+    localStorage.setItem(WORKSPACE_KEY, mode);
+    document.cookie = `buffet_workspace=${mode}; Path=/; Max-Age=${365 * 24 * 60 * 60}; SameSite=Lax`;
+    document.body.classList.remove("workspace-online", "workspace-offline");
+    document.body.classList.add(`workspace-${mode}`);
+    document.body.dataset.workspace = mode;
+    document.querySelectorAll(".workspace-label").forEach((node) => {
+      node.textContent = mode === "offline" ? (node.closest(".mobile-header") ? "Offline" : "Modo offline") : (node.closest(".mobile-header") ? "emenysFlow" : "Modo online");
+    });
+  }
+
+  function cookieWorkspace() {
+    const match = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith("buffet_workspace="));
+    return (match || "").split("=")[1] || "";
+  }
+
+  function wantsOfflineWorkspace() {
+    return currentWorkspace() === "offline"
+      || localStorage.getItem(WORKSPACE_KEY) === "offline"
+      || cookieWorkspace() === "offline";
+  }
+
+  function stayOfflineChosen() {
+    return sessionStorage.getItem(STAY_OFFLINE_KEY) === "1" || reconnectDismissed;
+  }
+
+  function chooseStayOffline() {
+    reconnectDismissed = true;
+    sessionStorage.setItem(STAY_OFFLINE_KEY, "1");
+  }
+
+  function clearStayOffline() {
+    reconnectDismissed = false;
+    sessionStorage.removeItem(STAY_OFFLINE_KEY);
+  }
+
+  function onOfflineHub() {
+    const path = location.pathname;
+    return path === "/offline" || path.endsWith("/offline.html") || Boolean(document.querySelector("[data-offline-home], [data-offline-hub]"));
+  }
+
+  function markDisconnected() {
+    sessionStorage.setItem(WAS_OFFLINE_KEY, "1");
+  }
+
+  function wasDisconnected() {
+    return sessionStorage.getItem(WAS_OFFLINE_KEY) === "1";
+  }
+
+  function clearDisconnected() {
+    sessionStorage.removeItem(WAS_OFFLINE_KEY);
+  }
+
+  function openOnlineMode() {
+    clearStayOffline();
+    reconnectDismissed = true;
+    clearDisconnected();
+    persistWorkspace("online");
+    showReconnectBanner(false);
+    if (onOfflineHub()) location.assign("/");
+  }
+
+  function showReconnectBanner(visible) {
+    const banner = document.querySelector("[data-reconnect-banner]");
+    if (!banner) return;
+    banner.hidden = !visible;
+  }
+
+  async function probeService() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(HEALTH_URL, {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" },
+        signal: controller.signal
+      });
+      const data = await response.json().catch(() => ({}));
+      return response.ok && data.ok === true;
+    } catch (_error) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function applyServiceState(reachable) {
+    const previous = serviceReachable;
+    serviceReachable = reachable;
+    if (!document.body.classList.contains("app-shell") && !document.body.classList.contains("offline-shell")) {
+      return reachable;
+    }
+    if (!reachable) {
+      failCount += 1;
+      if (failCount < 2 && previous !== false && navigator.onLine) return reachable;
+      clearStayOffline();
+      markDisconnected();
+      showReconnectBanner(false);
+      persistWorkspace("offline");
+      await updateStatus("Sem conexão com o emenysFlow", "offline");
+      if (!isOfflineCapablePath() && !switchingToOffline) {
+        switchingToOffline = true;
+        location.replace("/offline");
+      }
+      return reachable;
+    }
+    failCount = 0;
+    if (wasDisconnected() && onOfflineHub() && !stayOfflineChosen()) {
+      persistWorkspace("offline");
+      showReconnectBanner(true);
+      await updateStatus("Serviço online — continue offline ou abra o sistema completo", "online");
+    } else if (isOfflineCapablePath() && wantsOfflineWorkspace()) {
+      persistWorkspace("offline");
+      showReconnectBanner(false);
+      await updateStatus("Modo offline neste aparelho", reachable ? "online" : "offline");
+    } else {
+      if (!onOfflineHub()) clearDisconnected();
+      persistWorkspace("online");
+      showReconnectBanner(false);
+      await updateStatus("Conectado ao emenysFlow", "online");
+      fetch("/offline", { credentials: "same-origin" }).catch(() => null);
+    }
+    if (previous === false && reachable && isSyncEnabled()) {
+      syncOperations(true).catch(() => null);
+    }
+    return reachable;
+  }
+
+  async function watchServiceConnection() {
+    const reachable = await probeService();
+    await applyServiceState(reachable);
+    if (reachable && canUseOfflineData()) refreshBootstrap().catch(() => null);
+    return reachable;
   }
 
   async function refreshBootstrap() {
-    if (!navigator.onLine || !document.querySelector("[data-sync-status-bar]")) return;
+    if (!canUseOfflineData()) return;
+    const reachable = serviceReachable === null ? await probeService() : serviceReachable;
+    if (!reachable) return;
     const response = await fetch("/api/offline/bootstrap", { credentials: "same-origin", headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" } });
     if (!response.ok) throw new Error("Não foi possível atualizar os dados offline.");
     const data = await response.json();
     await putRecord("meta", { key: "bootstrap", value: data, updated_at: new Date().toISOString() });
     await putRecord("meta", { key: "last_sync", value: data.synced_at || new Date().toISOString() });
+    await updateStatus("Eventos salvos neste aparelho", "online");
+    return data;
   }
 
   function formPayload(form) {
@@ -237,7 +431,8 @@
       const required = Number(quantity.max || quantity.value || 0);
       const actions = document.createElement("div");
       actions.className = "mobile-quick-actions";
-      actions.innerHTML = '<button type="button" class="button primary" data-quick-complete>✓ Concluído</button><button type="button" class="button danger" data-quick-missing>Falta quantidade</button><div class="mobile-missing-editor" hidden><label>Quanto falta?<input type="number" min="1" step="1" required></label><button type="button" class="button danger" data-quick-missing-save>Confirmar falta</button></div><small aria-live="polite"></small>';
+      const checkIcon = window.emenysIcon ? window.emenysIcon("check") : "";
+      actions.innerHTML = `<button type="button" class="button primary" data-quick-complete>${checkIcon} Concluído</button><button type="button" class="button danger" data-quick-missing>Falta quantidade</button><div class="mobile-missing-editor" hidden><label>Quanto falta?<input type="number" min="1" step="1" required></label><button type="button" class="button danger" data-quick-missing-save>Confirmar falta</button></div><small aria-live="polite"></small>`;
       form.before(actions);
       const status = actions.querySelector("small");
       const editor = actions.querySelector(".mobile-missing-editor");
@@ -323,8 +518,13 @@
     }
   }
 
-  async function syncOperations() {
-    if (!navigator.onLine || synchronizing) return;
+  async function syncOperations(force = false) {
+    if (synchronizing) return;
+    if (serviceReachable === false || (!navigator.onLine && serviceReachable !== true)) return;
+    if (!force && !isSyncEnabled()) {
+      await updateStatus();
+      return;
+    }
     const all = await getAll("operations").catch(() => []);
     const photos = await getAll("photos").catch(() => []);
     const hasPendingUpdates = all.some((item) => item.status === "pending" || item.status === "failed")
@@ -422,36 +622,103 @@
     });
   }
 
+  function eventField(event, ...keys) {
+    for (const key of keys) {
+      if (event?.[key] != null && event[key] !== "") return event[key];
+    }
+    return "";
+  }
+
+  const icon = (name) => (window.emenysIcon ? window.emenysIcon(name) : "");
+
+  function fillDataIcons() {
+    document.querySelectorAll("[data-icon]").forEach((node) => {
+      node.innerHTML = icon(node.dataset.icon);
+    });
+  }
+
+  function emptyState(title, copy) {
+    return `<div class="empty-state panel">${icon("events")}<strong>${title}</strong><p>${copy}</p></div>`;
+  }
+
   async function renderOfflineHome() {
     const root = document.querySelector("[data-offline-home]");
     if (!root) return;
     const saved = await getRecord("meta", "bootstrap").catch(() => null);
     if (!saved?.value) {
-      root.innerHTML = "<p>Nenhum evento foi sincronizado neste aparelho. Conecte-se e abra o emenysFlow ao menos uma vez.</p>";
+      root.innerHTML = emptyState("Nenhum evento foi salvo neste aparelho.", "Entre no modo online, abra as checklists e use “Salvar eventos neste aparelho”.");
       return;
     }
     const expiration = new Date(saved.value.offline_access_expires_at || 0);
     if (expiration < new Date()) {
-      root.innerHTML = "<p>O acesso offline expirou. Conecte-se novamente para validar sua sessão.</p>";
+      root.innerHTML = emptyState("O acesso offline expirou.", "Conecte-se novamente para validar sua sessão e baixar os eventos.");
       return;
     }
     root.replaceChildren();
-    (saved.value.events || []).forEach((bundle) => {
-      const card = document.createElement("details");
-      card.className = "offline-event-card";
-      const event = bundle.event;
+    const events = saved.value.events || [];
+    if (!events.length) {
+      root.innerHTML = emptyState("Nenhum evento disponível offline.", "Cadastre um evento no modo online e salve-o neste aparelho.");
+      return;
+    }
+    events.forEach((bundle) => {
+      const event = bundle.event || {};
+      const id = eventField(event, "id", "ID");
+      const name = eventField(event, "name", "Name") || "Evento";
+      const client = eventField(event, "client_name", "ClientName");
+      const guests = eventField(event, "guest_count", "GuestCount");
+      const venue = eventField(event, "venue", "Venue");
       const items = bundle.checklist?.items || bundle.checklist?.Items || [];
-      const menuSections = bundle.menu || [];
-      card.innerHTML = `<summary><strong>${event.name || event.Name}</strong><span>${event.client_name || event.ClientName} · ${event.guest_count || event.GuestCount} pessoas</span></summary><div class="offline-event-detail"><h3>Cardápio</h3><div data-menu></div><h3>Serviços</h3><p>${(bundle.service_ids || []).length} modelo(s) de serviço vinculado(s)</p><h3>Checklist</h3><ul data-checklist></ul></div>`;
-      const menu = card.querySelector("[data-menu]");
-      menu.textContent = menuSections.map((section) => `${section.name || section.Name || section.section_name}: ${(section.items || section.Items || []).filter((item) => !(item.was_removed || item.WasRemoved)).map((item) => item.display_name || item.DisplayName || item.name || item.Name).join(", ")}`).join(" · ") || "Sem cardápio sincronizado.";
-      const checklist = card.querySelector("[data-checklist]");
-      items.forEach((item) => {
-        const row = document.createElement("li");
-        row.textContent = `${item.name || item.Name}: ${item.required_quantity ?? item.RequiredQuantity} ${item.unit || item.Unit}`;
-        checklist.append(row);
-      });
+      const card = document.createElement("article");
+      card.className = "panel offline-event-card";
+      card.innerHTML = `<header><span class="offline-card-icon">${icon("events")}</span><div><h2></h2><p></p></div></header><p></p><div class="offline-event-actions"><a class="button primary" href="/events/${id}/operation">${icon("checklists")} Abrir checklist</a><a class="button secondary" href="/events/${id}/layout">${icon("layouts")} Organizar layout</a></div>`;
+      card.querySelector("h2").textContent = name;
+      card.querySelector("header p").textContent = [client, venue, guests ? `${guests} pessoas` : ""].filter(Boolean).join(" · ");
+      card.querySelector("header + p").textContent = `${items.length} itens na checklist salva`;
       root.append(card);
+    });
+    const layouts = saved.value.standalone_layouts || saved.value.standaloneLayouts || [];
+    if (layouts.length) {
+      const block = document.createElement("section");
+      block.className = "panel offline-layout-panel";
+      block.innerHTML = `<div class="panel-heading"><div><span class="eyebrow">Organizador de layout</span><h2>Plantas salvas neste aparelho</h2></div></div><div data-layout-list></div>`;
+      const list = block.querySelector("[data-layout-list]");
+      layouts.forEach((layout) => {
+        const id = eventField(layout, "id", "ID");
+        const row = document.createElement("p");
+        const link = document.createElement("a");
+        link.className = "text-link";
+        link.href = `/layouts/${id}`;
+        link.innerHTML = `${eventField(layout, "name", "Name") || "Layout"} ${icon("arrow")}`;
+        row.append(link);
+        list.append(row);
+      });
+      root.append(block);
+    }
+  }
+
+  function bindSyncPreference() {
+    const toggle = document.querySelector("[data-sync-enabled]");
+    if (toggle) {
+      toggle.checked = isSyncEnabled();
+      toggle.addEventListener("change", async () => {
+        setSyncEnabled(toggle.checked);
+        await updateStatus();
+        if (toggle.checked && navigator.onLine) await syncOperations(true);
+      });
+    }
+    document.querySelectorAll("[data-download-offline]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await refreshBootstrap();
+          await renderOfflineHome();
+          window.alert("Eventos e layouts foram salvos neste aparelho.");
+        } catch (error) {
+          window.alert(error.message || "Não foi possível salvar os dados offline.");
+        } finally {
+          button.disabled = false;
+        }
+      });
     });
   }
 
@@ -495,11 +762,23 @@
   }, true);
 
   document.addEventListener("click", (event) => {
-    if (event.target.closest("[data-sync-now]")) syncOperations();
+    if (event.target.closest("[data-sync-now]")) syncOperations(true);
     if (event.target.closest("[data-close-conflicts]")) document.querySelector("[data-conflict-panel]").hidden = true;
+    if (event.target.closest("[data-stay-offline]")) {
+      chooseStayOffline();
+      persistWorkspace("offline");
+      showReconnectBanner(false);
+    }
+    if (event.target.closest("[data-open-online]")) {
+      event.preventDefault();
+      openOnlineMode();
+    }
   });
-  window.addEventListener("online", () => syncOperations());
-  window.addEventListener("offline", () => updateStatus("Offline — alterações serão guardadas", "offline"));
+  window.addEventListener("online", () => watchServiceConnection());
+  window.addEventListener("offline", () => applyServiceState(false));
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) watchServiceConnection();
+  });
   navigator.serviceWorker?.addEventListener("message", (event) => {
     if (event.data?.type === "SYNC_REQUESTED") syncOperations();
   });
@@ -509,13 +788,14 @@
       registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
       registration?.update().catch(() => null);
     }
+    fillDataIcons();
+    bindSyncPreference();
     await updateStatus();
     await renderConflicts();
     await renderOfflineHome();
     initializeOperationalQuickLoading();
-    if (navigator.onLine) {
-      await syncOperations();
-      refreshBootstrap().catch(() => null);
-    }
+    await watchServiceConnection();
+    if (serviceReachable && isSyncEnabled()) await syncOperations(true);
+    probeTimer = window.setInterval(watchServiceConnection, PROBE_MS);
   });
 })();

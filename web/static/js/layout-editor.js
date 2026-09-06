@@ -1,21 +1,25 @@
 const WAITER_COLORS = [
-  "#e53935", "#1e88e5", "#43a047", "#fb8c00", "#8e24aa",
-  "#00acc1", "#fdd835", "#6d4c41", "#546e7a", "#d81b60",
-  "#3949ab", "#7cb342", "#f4511e", "#00897b", "#c0ca33",
+  "#7ec8ff", "#ff8fab", "#7dffb3", "#ffd166", "#c084fc",
+  "#fb923c", "#67e8f9", "#f472b6", "#86efac", "#facc15",
+  "#818cf8", "#fb7185", "#2dd4bf", "#e879f9", "#94a3b8",
 ];
+const SHADOW_WAITER_COLOR = "#e7d7a7";
 
 const LAYOUT_PALETTE = [
-  "#ef5350", "#ec407a", "#ab47bc", "#7e57c2", "#5c6bc0",
-  "#42a5f5", "#29b6f6", "#26c6da", "#26a69a", "#66bb6a",
-  "#9ccc65", "#d4e157", "#ffee58", "#ffca28", "#ffa726",
-  "#ff7043", "#8d6e63", "#78909c", "#607d8b", "#455a64",
-  "#e53935", "#d81b60", "#8e24aa", "#5e35b1", "#3949ab",
-  "#1e88e5", "#039be5", "#00acc1", "#00897b", "#43a047",
-  "#7cb342", "#c0ca33", "#fdd835", "#ffb300", "#fb8c00",
-  "#f4511e", "#6d4c41", "#546e7a", "#37474f", "#ad1457",
-  "#6a1b9a", "#4527a0", "#1565c0", "#0277bd", "#00695c",
-  "#2e7d32", "#558b2f", "#9e9d24", "#f9a825", "#ef6c00",
+  "#7ec8ff", "#ff8fab", "#7dffb3", "#ffd166", "#c084fc",
+  "#fb923c", "#67e8f9", "#f472b6", "#86efac", "#facc15",
+  "#818cf8", "#fb7185", "#2dd4bf", "#e879f9", "#ffffff",
+  "#f2f2f2", "#d9d9d9", "#a6a6a6", "#737373", "#404040",
 ];
+
+const LAYOUT_THEME = {
+  floor: "#101010",
+  ink: "#f5f5f5",
+  muted: "#c4c4c4",
+  glassStroke: "rgba(255,255,255,0.58)",
+  selection: "rgba(255,255,255,0.92)",
+  preview: "rgba(255,255,255,0.08)",
+};
 
 const DEFAULT_LAYOUT = { version: 2, width: 1400, height: 900, waiters: [], elements: [] };
 const MOBILE_LAYOUT_QUERY = window.matchMedia("(max-width: 820px)");
@@ -38,31 +42,160 @@ const TABLE_ROUND_SIZE = TABLE_SIZES.medium.table_round.width;
 const TABLE_RECT_WIDTH = TABLE_SIZES.medium.table_rect.width;
 const TABLE_RECT_HEIGHT = TABLE_SIZES.medium.table_rect.height;
 const TABLE_ROW_GAP = GRID_SIZE;
-const MIN_VIEW_SCALE = 0.45;
-const MAX_VIEW_SCALE = 4;
 const WORLD_MIN = -6000;
 const WORLD_MAX = 12000;
 
-function touchDistance(touches) {
-  const dx = touches[0].clientX - touches[1].clientX;
-  const dy = touches[0].clientY - touches[1].clientY;
-  return Math.hypot(dx, dy);
-}
-
-function touchCenter(touches) {
-  return {
-    x: (touches[0].clientX + touches[1].clientX) / 2,
-    y: (touches[0].clientY + touches[1].clientY) / 2,
-  };
-}
-
-function layoutColorForWaiter(name, registry) {
+function layoutColorForWaiter(name, registry, options = {}) {
   const key = (name || "").trim().toLowerCase();
-  if (!key) return "#94a3b8";
+  if (!key) return "#9a9a9a";
   if (registry.has(key)) return registry.get(key);
-  const color = WAITER_COLORS[registry.size % WAITER_COLORS.length];
+  const color = options.shadow ? SHADOW_WAITER_COLOR : WAITER_COLORS[registry.size % WAITER_COLORS.length];
   registry.set(key, color);
   return color;
+}
+
+function layoutAccentForElement(item, registry) {
+  if (!item || item.type === "marker") return "rgba(255,255,255,0.38)";
+  if (item.color) return item.color;
+  if (item.waiter) return layoutColorForWaiter(item.waiter, registry);
+  return LAYOUT_THEME.glassStroke;
+}
+
+function svgEl(name, attrs) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+  Object.entries(attrs).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) node.setAttribute(key, String(value));
+  });
+  return node;
+}
+
+function appendGlassShape(group, item, registry, options = {}) {
+  const ghost = Boolean(options.ghost);
+  const accent = layoutAccentForElement({ ...item, waiter: options.waiter || item.waiter }, registry);
+  const cx = item.x + item.width / 2;
+  const cy = item.y + item.height / 2;
+  const isRound = item.type === "table_round";
+  const isMarker = item.type === "marker";
+
+  if (isRound) {
+    const radius = Math.min(item.width, item.height) / 2;
+    group.append(svgEl("circle", {
+      "data-layout-shape": "body",
+      cx,
+      cy,
+      r: radius,
+      fill: "url(#layout-glass-fill)",
+      stroke: LAYOUT_THEME.glassStroke,
+      "stroke-width": ghost ? "1.5" : "1.25",
+      filter: ghost ? "" : "url(#layout-glass-shadow)",
+      "fill-opacity": ghost ? "0.72" : "1",
+    }));
+    group.append(svgEl("ellipse", {
+      "data-layout-shape": "highlight",
+      cx,
+      cy: cy - radius * 0.32,
+      rx: radius * 0.62,
+      ry: radius * 0.28,
+      fill: "url(#layout-glass-highlight)",
+      "pointer-events": "none",
+    }));
+    group.append(svgEl("circle", {
+      "data-layout-shape": "ring",
+      cx,
+      cy,
+      r: Math.max(6, radius - 3),
+      fill: "none",
+      stroke: accent,
+      "stroke-width": "2.4",
+      "pointer-events": "none",
+    }));
+    return;
+  }
+
+  group.append(svgEl("rect", {
+    "data-layout-shape": "body",
+    x: item.x,
+    y: item.y,
+    width: item.width,
+    height: item.height,
+    rx: isMarker ? "8" : "10",
+    fill: isMarker ? "url(#layout-glass-fill-marker)" : "url(#layout-glass-fill)",
+    "fill-opacity": ghost ? "0.72" : isMarker ? "0.95" : "1",
+    stroke: isMarker ? "rgba(255,255,255,0.28)" : LAYOUT_THEME.glassStroke,
+    "stroke-width": isMarker ? "1.4" : ghost ? "1.5" : "1.25",
+    "stroke-dasharray": isMarker ? "7 5" : "",
+    filter: ghost || isMarker ? "" : "url(#layout-glass-shadow)",
+  }));
+  if (!isMarker) {
+    group.append(svgEl("rect", {
+      "data-layout-shape": "highlight",
+      x: item.x + 8,
+      y: item.y + 6,
+      width: Math.max(0, item.width - 16),
+      height: Math.max(10, item.height * 0.28),
+      rx: "8",
+      fill: "url(#layout-glass-highlight)",
+      "pointer-events": "none",
+    }));
+    group.append(svgEl("rect", {
+      "data-layout-shape": "ring",
+      x: item.x + 3,
+      y: item.y + 3,
+      width: Math.max(0, item.width - 6),
+      height: Math.max(0, item.height - 6),
+      rx: "8",
+      fill: "none",
+      stroke: accent,
+      "stroke-width": "2.2",
+      "pointer-events": "none",
+    }));
+  }
+}
+
+function syncGlassGeometry(group, element) {
+  const body = group.querySelector('[data-layout-shape="body"]');
+  const highlight = group.querySelector('[data-layout-shape="highlight"]');
+  const ring = group.querySelector('[data-layout-shape="ring"]');
+  const cx = element.x + element.width / 2;
+  const cy = element.y + element.height / 2;
+  if (element.type === "table_round") {
+    const radius = Math.min(element.width, element.height) / 2;
+    if (body) {
+      body.setAttribute("cx", String(cx));
+      body.setAttribute("cy", String(cy));
+      body.setAttribute("r", String(radius));
+    }
+    if (ring) {
+      ring.setAttribute("cx", String(cx));
+      ring.setAttribute("cy", String(cy));
+      ring.setAttribute("r", String(Math.max(6, radius - 3)));
+    }
+    if (highlight) {
+      highlight.setAttribute("cx", String(cx));
+      highlight.setAttribute("cy", String(cy - radius * 0.32));
+      highlight.setAttribute("rx", String(radius * 0.62));
+      highlight.setAttribute("ry", String(radius * 0.28));
+    }
+    return;
+  }
+  if (body) {
+    body.setAttribute("x", String(element.x));
+    body.setAttribute("y", String(element.y));
+    body.setAttribute("width", String(element.width));
+    body.setAttribute("height", String(element.height));
+  }
+  if (ring) {
+    ring.setAttribute("x", String(element.x + 3));
+    ring.setAttribute("y", String(element.y + 3));
+    ring.setAttribute("width", String(Math.max(0, element.width - 6)));
+    ring.setAttribute("height", String(Math.max(0, element.height - 6)));
+  }
+  if (highlight) {
+    highlight.setAttribute("x", String(element.x + 8));
+    highlight.setAttribute("y", String(element.y + 6));
+    highlight.setAttribute("width", String(Math.max(0, element.width - 16)));
+    highlight.setAttribute("height", String(Math.max(10, element.height * 0.28)));
+  }
 }
 
 function createElementId() {
@@ -194,7 +327,7 @@ function syncColorPickerUI(form, element, waiterRegistry) {
   const clearBtn = form.querySelector("[data-layout-color-clear]");
   const swatches = form.querySelector("[data-layout-color-swatches]");
   const customColor = (element?.color || "").trim();
-  const effectiveColor = customColor || layoutColorForWaiter(element?.waiter || "", waiterRegistry) || "#edf3f0";
+  const effectiveColor = customColor || layoutColorForWaiter(element?.waiter || "", waiterRegistry) || "#f5f5f5";
 
   if (preview) {
     preview.style.backgroundColor = effectiveColor;
@@ -357,7 +490,7 @@ async function svgToCanvas(svg, bounds) {
   canvas.height = pixelHeight;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas indisponível");
-  ctx.fillStyle = "#fafbf8";
+  ctx.fillStyle = LAYOUT_THEME.floor;
   ctx.fillRect(0, 0, pixelWidth, pixelHeight);
   ctx.drawImage(image, 0, 0, pixelWidth, pixelHeight);
   return canvas;
@@ -418,14 +551,14 @@ function composeExportCanvas(layoutCanvas, legendEntries) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return layoutCanvas;
 
-  ctx.fillStyle = "#fafbf8";
+  ctx.fillStyle = LAYOUT_THEME.floor;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(layoutCanvas, 0, 0);
 
   const legendTop = layoutCanvas.height;
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = "#0a0a0a";
   ctx.fillRect(0, legendTop, canvas.width, metrics.height);
-  ctx.strokeStyle = "#dfe5df";
+  ctx.strokeStyle = "rgba(255,255,255,0.16)";
   ctx.lineWidth = Math.max(1, Math.round(canvas.width / 900));
   ctx.beginPath();
   ctx.moveTo(0, legendTop + 0.5);
@@ -433,7 +566,7 @@ function composeExportCanvas(layoutCanvas, legendEntries) {
   ctx.stroke();
 
   const contentTop = legendTop + metrics.padding;
-  ctx.fillStyle = "#173f38";
+  ctx.fillStyle = LAYOUT_THEME.ink;
   ctx.font = `700 ${metrics.titleFontSize}px Inter, ui-sans-serif, system-ui, sans-serif`;
   ctx.fillText("Legenda dos garçons", metrics.padding, contentTop + metrics.titleFontSize);
 
@@ -448,11 +581,11 @@ function composeExportCanvas(layoutCanvas, legendEntries) {
 
     ctx.fillStyle = entry.color;
     ctx.fillRect(x, y, metrics.swatchSize, metrics.swatchSize);
-    ctx.strokeStyle = "rgba(23,63,56,0.12)";
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
     ctx.lineWidth = Math.max(1, Math.round(canvas.width / 1200));
     ctx.strokeRect(x + 0.5, y + 0.5, metrics.swatchSize - 1, metrics.swatchSize - 1);
 
-    ctx.fillStyle = "#15231f";
+    ctx.fillStyle = LAYOUT_THEME.ink;
     ctx.font = `600 ${metrics.fontSize}px Inter, ui-sans-serif, system-ui, sans-serif`;
     fillTextEllipsis(ctx, entry.name, x + metrics.swatchSize + Math.round(8 * Math.max(1, canvas.width / 900)), y + metrics.swatchSize - 2, labelMaxWidth);
   });
@@ -562,8 +695,12 @@ function initializeLayoutEditor(root = document) {
     if (!configuredWaiters.length && waiterCountInput) {
       configuredWaiters = Array.from({ length: Number(waiterCountInput.value) || 0 }, (_, index) => `Garçom ${index + 1}`);
     }
+  } else if (!configuredWaiters.length) {
+    const eventWaiters = Math.max(0, Number(editor.dataset.waiterCount) || 0);
+    configuredWaiters = Array.from({ length: eventWaiters }, (_, index) => `Garçom ${index + 1}`);
   }
   state.waiters = [...configuredWaiters];
+  let includeCoLeader = false;
 
   let selectedId = null;
   let activeTool = "select";
@@ -574,15 +711,54 @@ function initializeLayoutEditor(root = document) {
   let rowDragState = null;
   let fullscreenActive = false;
   let view = { x: 0, y: 0, scale: 1 };
-  let pinchState = null;
   let panState = null;
   let draftReady = false;
   let draftTimer = null;
   const waiterRegistry = new Map();
-  configuredWaiters.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
-  state.elements.forEach((item) => {
-    if (item.waiter) layoutColorForWaiter(item.waiter, waiterRegistry);
-  });
+  function registerWaiterColors() {
+    const shadow = shadowWaiterName();
+    configuredWaiters.forEach((name) => layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow }));
+    state.elements.forEach((item) => {
+      if (item.waiter) layoutColorForWaiter(item.waiter, waiterRegistry, { shadow: item.waiter === shadow });
+    });
+  }
+
+  function shadowWaiterName() {
+    const names = configuredWaiters.filter(Boolean);
+    return names.length ? names[names.length - 1] : "";
+  }
+
+  function staffCounts() {
+    return {
+      waiters: configuredWaiters.filter(Boolean).length || Number(editor.dataset.waiterCount) || 0,
+      coordinators: Number(editor.dataset.coordinatorCount) || 0,
+      leaders: Number(editor.dataset.leaderCount) || 0,
+      coleaders: Number(editor.dataset.coleaderCount) || 0,
+    };
+  }
+
+  function currentDivision() {
+    const suggest = window.emenysSuggestFloorWaiterDivision;
+    if (!suggest) return null;
+    const staff = staffCounts();
+    return suggest({
+      tables: tableCount(state.elements),
+      waiters: staff.waiters,
+      coordinators: staff.coordinators,
+      leaders: staff.leaders,
+      coleaders: staff.coleaders,
+      includeCoLeader,
+    });
+  }
+
+  function servingNamesForDivision(plan) {
+    const waiters = configuredWaiters.filter(Boolean);
+    const serving = waiters.slice(0, Math.max(0, waiters.length - (plan?.shadowWaiters || 0)));
+    const coleaders = window.emenysColeaderNames?.(plan?.usedCoLeaders || 0) || [];
+    return [...serving, ...coleaders];
+  }
+
+  registerWaiterColors();
 
   function isMobileLayout() {
     return MOBILE_LAYOUT_QUERY.matches;
@@ -670,58 +846,14 @@ function initializeLayoutEditor(root = document) {
   }
 
   function fitInitialView() {
-    syncViewportSize();
-    const rect = viewport?.getBoundingClientRect();
-    if (!rect?.width || !rect?.height) {
-      updateViewBox();
-      return;
-    }
-
-    const margin = 1.12;
-    const emptyScale = 2;
-
-    if (!state.elements.length) {
-      view.scale = emptyScale;
-      const viewWidth = state.width / view.scale;
-      const viewHeight = state.height / view.scale;
-      view.x = state.width / 2 - viewWidth / 2;
-      view.y = state.height / 2 - viewHeight / 2;
-      updateViewBox();
-      return;
-    }
-
-    const bounds = contentBounds(80);
-    const fitScale = Math.min(
-      state.width / (bounds.width * margin),
-      state.height / (bounds.height * margin),
-    );
-    view.scale = Math.min(MAX_VIEW_SCALE, Math.max(0.15, fitScale));
-    const viewWidth = state.width / view.scale;
-    const viewHeight = state.height / view.scale;
-    const centerX = bounds.x + bounds.width / 2;
-    const centerY = bounds.y + bounds.height / 2;
-    view.x = centerX - viewWidth / 2;
-    view.y = centerY - viewHeight / 2;
+    view.x = 0;
+    view.y = 0;
+    view.scale = 1;
     updateViewBox();
   }
 
   function resetView() {
     fitInitialView();
-  }
-
-  function zoomBy(factor, clientX, clientY) {
-    const anchor = Number.isFinite(clientX) ? svgPoint(svg, clientX, clientY) : { x: state.width / 2, y: state.height / 2 };
-    const nextScale = Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, view.scale * factor));
-    if (nextScale === view.scale) return;
-    const widthBefore = state.width / view.scale;
-    const heightBefore = state.height / view.scale;
-    view.scale = nextScale;
-    const widthAfter = state.width / view.scale;
-    const heightAfter = state.height / view.scale;
-    view.x += (anchor.x - view.x) * (1 - widthAfter / widthBefore);
-    view.y += (anchor.y - view.y) * (1 - heightAfter / heightBefore);
-    clampView();
-    updateViewBox();
   }
 
   function clearPlacementHint() {
@@ -749,10 +881,7 @@ function initializeLayoutEditor(root = document) {
     placementHint.classList.add("is-interactive");
     placementHint.replaceChildren();
     const text = document.createElement("p");
-/*
     text.className = "layout-placement-text";
-*/
-    text.idName =
     text.textContent = "Arraste a fileira para posicionar. Toque em Confirmar quando estiver no lugar certo.";
     const actions = document.createElement("div");
     actions.className = "layout-placement-actions";
@@ -901,11 +1030,12 @@ function initializeLayoutEditor(root = document) {
 
   function applyConfiguredWaiters() {
     state.waiters = configuredWaiters.filter(Boolean);
-    configuredWaiters.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
+    registerWaiterColors();
     refreshWaiterSelect();
     syncStandaloneHiddenFields();
     if (statConfiguredWaiters) statConfiguredWaiters.textContent = String(configuredWaiters.filter(Boolean).length);
     updateLegend();
+    refreshDivisionPanel();
   }
 
   function syncConfiguredWaiters(options = {}) {
@@ -926,15 +1056,21 @@ function initializeLayoutEditor(root = document) {
   function renderWaiterNameGrid() {
     if (!waiterNameGrid) return;
     waiterNameGrid.replaceChildren();
+    const shadow = shadowWaiterName();
     configuredWaiters.forEach((name, index) => {
       const label = document.createElement("label");
-      label.textContent = `Garçom ${index + 1}`;
+      const title = document.createElement("span");
+      title.className = "layout-waiter-name-title";
+      const swatch = document.createElement("span");
+      swatch.className = "layout-legend-swatch";
+      swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
+      title.append(swatch, document.createTextNode(name === shadow ? `Garçom ${index + 1} · sombra` : `Garçom ${index + 1}`));
       const input = document.createElement("input");
       input.type = "text";
       input.value = name;
-      input.placeholder = `Nome do garçom ${index + 1}`;
+      input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
       bindWaiterNameInput(input, index);
-      label.append(input);
+      label.append(title, input);
       waiterNameGrid.append(label);
     });
   }
@@ -1007,86 +1143,155 @@ function initializeLayoutEditor(root = document) {
     if (statTables) statTables.textContent = String(tableCount(state.elements));
     if (statWaiters) statWaiters.textContent = String(waiterNamesFromElements(state.elements).length);
     if (statGuests && metaForm) statGuests.textContent = metaForm.querySelector('[name="guest_count"]')?.value || "0";
+    refreshDivisionPanel();
   }
 
   function updateLegend() {
     if (!legendList) return;
     legendList.replaceChildren();
-    const names = sortWaiterNames([...new Set([...configuredWaiters, ...waiterNamesFromElements(state.elements)])].filter(Boolean));
+    const shadow = shadowWaiterName();
+    const names = sortWaiterNames([...new Set([...configuredWaiters, ...servingNamesForDivision(currentDivision()), ...waiterNamesFromElements(state.elements)])].filter(Boolean));
     names.forEach((name) => {
       const li = document.createElement("li");
       const swatch = document.createElement("span");
       swatch.className = "layout-legend-swatch";
-      swatch.style.background = layoutColorForWaiter(name, waiterRegistry);
+      swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
       const label = document.createElement("span");
-      label.textContent = name;
+      label.textContent = name === shadow ? `${name} · sombra dos noivos` : name;
       li.append(swatch, label);
       legendList.append(li);
     });
   }
 
-  function elementFill(item) {
-    if (item.type === "marker") return "#e2e8f0";
-    if (item.color) return item.color;
-    if (item.waiter) return layoutColorForWaiter(item.waiter, waiterRegistry);
-    return "#ffffff";
+  function formatTablesPerPerson(value) {
+    if (!Number.isFinite(value) || value <= 0) return "—";
+    return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(".", ",");
   }
 
-  function elementStroke(item) {
-    if (item.type === "marker") return "#94a3b8";
-    if (item.waiter) return layoutColorForWaiter(item.waiter, waiterRegistry);
-    return "#173f38";
+  function refreshDivisionPanel(root = editor) {
+    const plan = currentDivision();
+    if (!plan) return;
+    root.querySelectorAll("[data-layout-division-summary]").forEach((node) => {
+      const parts = [
+        `${plan.tableCount} ${plan.tableCount === 1 ? "mesa" : "mesas"}`,
+        plan.shadowWaiters ? "1 sombra dos noivos" : null,
+        "coordenação e líder sem mesa",
+      ].filter(Boolean);
+      if (plan.servingPeople > 0) {
+        const per = formatTablesPerPerson(plan.tablesPerPerson);
+        parts.push(`${per} ${per === "1" ? "mesa" : "mesas"} por pessoa na pista`);
+      } else if (plan.tableCount > 0) {
+        parts.push("ninguém na pista até incluir o colíder ou mais garçons");
+      }
+      node.textContent = parts.join(" · ");
+    });
+    root.querySelectorAll("[data-layout-division-coleader-row]").forEach((row) => {
+      row.hidden = !plan.offerCoLeader;
+    });
+    root.querySelectorAll("[data-layout-include-coleader]").forEach((input) => {
+      input.checked = includeCoLeader && plan.offerCoLeader;
+    });
+    root.querySelectorAll("[data-layout-division-shares]").forEach((list) => {
+      list.replaceChildren();
+      const names = servingNamesForDivision(plan);
+      names.forEach((name, index) => {
+        const item = document.createElement("li");
+        const swatch = document.createElement("span");
+        swatch.className = "layout-legend-swatch";
+        swatch.style.background = layoutColorForWaiter(name, waiterRegistry);
+        const label = document.createElement("span");
+        const tables = plan.shares[index] || 0;
+        label.textContent = `${name} · ${tables} ${tables === 1 ? "mesa" : "mesas"}`;
+        item.append(swatch, label);
+        list.append(item);
+      });
+      if (plan.shadowWaiters) {
+        const shadow = shadowWaiterName();
+        if (shadow) {
+          const item = document.createElement("li");
+          const swatch = document.createElement("span");
+          swatch.className = "layout-legend-swatch";
+          swatch.style.background = layoutColorForWaiter(shadow, waiterRegistry, { shadow: true });
+          const label = document.createElement("span");
+          label.textContent = `${shadow} · sombra dos noivos`;
+          item.append(swatch, label);
+          list.append(item);
+        }
+      }
+    });
+  }
+
+  function applySuggestedDivision() {
+    const plan = currentDivision();
+    if (!plan) return;
+    const names = servingNamesForDivision(plan);
+    if (!names.length) {
+      window.alert("Não há quem assuma mesa. Inclua o colíder ou cadastre mais garçons.");
+      return;
+    }
+    names.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
+    const tables = state.elements
+      .filter((item) => item.type === "table_round" || item.type === "table_rect")
+      .sort((left, right) => left.y - right.y || left.x - right.x);
+    let offset = 0;
+    names.forEach((name, index) => {
+      const count = plan.shares[index] || 0;
+      tables.slice(offset, offset + count).forEach((item) => {
+        item.waiter = name;
+        item.color = "";
+      });
+      offset += count;
+    });
+    if (plan.usedCoLeaders) {
+      state.waiters = [...new Set([...configuredWaiters.filter(Boolean), ...names])];
+    }
+    render();
+    persistHiddenInput();
+  }
+
+  function bindDivisionControls(root = editor) {
+    root.querySelectorAll("[data-layout-include-coleader]").forEach((input) => {
+      input.addEventListener("change", () => {
+        includeCoLeader = input.checked;
+        refreshDivisionPanel();
+        if (root !== editor) refreshDivisionPanel(root);
+        updateLegend();
+      });
+    });
+    root.querySelectorAll("[data-layout-apply-division]").forEach((button) => {
+      if (button.dataset.bound === "1") return;
+      button.dataset.bound = "1";
+      button.addEventListener("click", applySuggestedDivision);
+    });
   }
 
   function renderGhostTable(spec, waiterName = "") {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const waiter = (waiterName || "").trim();
     const centerX = spec.x + spec.width / 2;
     const centerY = spec.y + spec.height / 2;
-    const waiter = (waiterName || "").trim();
-    const stroke = waiter ? layoutColorForWaiter(waiter, waiterRegistry) : "#173f38";
-    const fill = waiter ? layoutColorForWaiter(waiter, waiterRegistry) : "#edf3f0";
-    if (spec.type === "table_round") {
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      circle.setAttribute("cx", String(centerX));
-      circle.setAttribute("cy", String(centerY));
-      circle.setAttribute("r", String(Math.min(spec.width, spec.height) / 2));
-      circle.setAttribute("fill", fill);
-      circle.setAttribute("fill-opacity", "1");
-      circle.setAttribute("stroke", stroke);
-      circle.setAttribute("stroke-width", "2.5");
-      group.append(circle);
-    } else {
-      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.setAttribute("x", String(spec.x));
-      rect.setAttribute("y", String(spec.y));
-      rect.setAttribute("width", String(spec.width));
-      rect.setAttribute("height", String(spec.height));
-      rect.setAttribute("rx", "6");
-      rect.setAttribute("fill", fill);
-      rect.setAttribute("fill-opacity", "1");
-      rect.setAttribute("stroke", stroke);
-      rect.setAttribute("stroke-width", "2.5");
-      group.append(rect);
-    }
-    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", String(centerX));
-    label.setAttribute("y", String(centerY - (waiter ? 6 : 0)));
-    label.setAttribute("text-anchor", "middle");
-    label.setAttribute("dominant-baseline", "middle");
-    label.setAttribute("fill", "#173f38");
-    label.setAttribute("font-size", "13");
-    label.setAttribute("font-weight", "700");
+    appendGlassShape(group, spec, waiterRegistry, { ghost: true, waiter });
+    const label = svgEl("text", {
+      x: centerX,
+      y: centerY - (waiter ? 6 : 0),
+      "text-anchor": "middle",
+      "dominant-baseline": "middle",
+      fill: LAYOUT_THEME.ink,
+      "font-size": "13",
+      "font-weight": "700",
+    });
     label.textContent = spec.label;
     group.append(label);
     if (waiter) {
-      const waiterLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      waiterLabel.setAttribute("x", String(centerX));
-      waiterLabel.setAttribute("y", String(centerY + 12));
-      waiterLabel.setAttribute("text-anchor", "middle");
-      waiterLabel.setAttribute("dominant-baseline", "middle");
-      waiterLabel.setAttribute("fill", stroke);
-      waiterLabel.setAttribute("font-size", "11");
-      waiterLabel.setAttribute("font-weight", "600");
+      const waiterLabel = svgEl("text", {
+        x: centerX,
+        y: centerY + 12,
+        "text-anchor": "middle",
+        "dominant-baseline": "middle",
+        fill: layoutColorForWaiter(waiter, waiterRegistry),
+        "font-size": "11",
+        "font-weight": "600",
+      });
       waiterLabel.textContent = waiter;
       group.append(waiterLabel);
     }
@@ -1108,8 +1313,8 @@ function initializeLayoutEditor(root = document) {
     outline.setAttribute("y", String(rowPreview.startY - 8));
     outline.setAttribute("width", String(metrics.rowWidth + 16));
     outline.setAttribute("height", String(metrics.rowHeight + 16));
-    outline.setAttribute("fill", "rgba(23,63,56,0.06)");
-    outline.setAttribute("stroke", "#173f38");
+    outline.setAttribute("fill", LAYOUT_THEME.preview);
+    outline.setAttribute("stroke", LAYOUT_THEME.selection);
     outline.setAttribute("stroke-width", "2");
     outline.setAttribute("stroke-dasharray", "10 6");
     outline.setAttribute("rx", "10");
@@ -1158,14 +1363,8 @@ function initializeLayoutEditor(root = document) {
   function updateResizableVisual(element) {
     const group = findElementGroup(element.id);
     if (!group) return;
-    const rect = group.querySelector("rect");
-    if (rect) {
-      rect.setAttribute("x", String(element.x));
-      rect.setAttribute("y", String(element.y));
-      rect.setAttribute("width", String(element.width));
-      rect.setAttribute("height", String(element.height));
-    }
-    const texts = group.querySelectorAll("text");
+    syncGlassGeometry(group, element);
+    const texts = group.querySelectorAll("text:not([data-layout-export-hide])");
     const centerX = element.x + element.width / 2;
     const centerY = element.y + element.height / 2;
     if (texts[0]) {
@@ -1243,10 +1442,10 @@ function initializeLayoutEditor(root = document) {
     rect.setAttribute("width", String(element.width + pad * 2));
     rect.setAttribute("height", String(element.height + pad * 2));
     rect.setAttribute("fill", "none");
-    rect.setAttribute("stroke", "#173f38");
+    rect.setAttribute("stroke", LAYOUT_THEME.selection);
     rect.setAttribute("stroke-width", "2");
     rect.setAttribute("stroke-dasharray", "6 4");
-    rect.setAttribute("rx", "6");
+    rect.setAttribute("rx", "10");
     layers.selection.append(rect);
 
     if (isResizableElement(element) && activeTool === "select") {
@@ -1256,8 +1455,8 @@ function initializeLayoutEditor(root = document) {
         hit.setAttribute("cx", String(cx));
         hit.setAttribute("cy", String(cy));
         hit.setAttribute("r", "11");
-        hit.setAttribute("fill", "#ffffff");
-        hit.setAttribute("stroke", "#173f38");
+        hit.setAttribute("fill", "#111111");
+        hit.setAttribute("stroke", LAYOUT_THEME.selection);
         hit.setAttribute("stroke-width", "2");
         hit.setAttribute("data-layout-resize-handle", handle.id);
         hit.style.cursor = handle.cursor;
@@ -1271,72 +1470,50 @@ function initializeLayoutEditor(root = document) {
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.dataset.layoutId = item.id;
     group.style.cursor = activeTool === "select" ? "grab" : "crosshair";
-    const fill = elementFill(item);
-    const stroke = elementStroke(item);
-
-    if (item.type === "table_round") {
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      const radius = Math.min(item.width, item.height) / 2;
-      circle.setAttribute("cx", String(item.x + item.width / 2));
-      circle.setAttribute("cy", String(item.y + item.height / 2));
-      circle.setAttribute("r", String(radius));
-      circle.setAttribute("fill", fill);
-      circle.setAttribute("stroke", stroke);
-      circle.setAttribute("stroke-width", "2");
-      group.append(circle);
-    } else {
-      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.setAttribute("x", String(item.x));
-      rect.setAttribute("y", String(item.y));
-      rect.setAttribute("width", String(item.width));
-      rect.setAttribute("height", String(item.height));
-      rect.setAttribute("rx", item.type === "marker" ? "4" : "6");
-      rect.setAttribute("fill", fill);
-      rect.setAttribute("fill-opacity", item.type === "marker" ? "0.45" : "1");
-      rect.setAttribute("stroke", stroke);
-      rect.setAttribute("stroke-width", item.type === "marker" ? "1.5" : "2");
-      if (item.type === "marker") rect.setAttribute("stroke-dasharray", "6 4");
-      group.append(rect);
-    }
+    appendGlassShape(group, item, waiterRegistry);
 
     const title = (item.label || "").trim();
     const waiter = (item.waiter || "").trim();
     const centerX = item.x + item.width / 2;
     const centerY = item.y + item.height / 2;
+    const accent = layoutAccentForElement(item, waiterRegistry);
 
     if (title) {
-      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", String(centerX));
-      label.setAttribute("y", String(centerY - (waiter ? 6 : 0)));
-      label.setAttribute("text-anchor", "middle");
-      label.setAttribute("dominant-baseline", "middle");
-      label.setAttribute("fill", item.type === "marker" ? "#64748b" : "#173f38");
-      label.setAttribute("font-size", item.type === "marker" ? "12" : "13");
-      label.setAttribute("font-weight", item.type === "marker" ? "600" : "700");
+      const label = svgEl("text", {
+        x: centerX,
+        y: centerY - (waiter ? 6 : 0),
+        "text-anchor": "middle",
+        "dominant-baseline": "middle",
+        fill: item.type === "marker" ? LAYOUT_THEME.muted : LAYOUT_THEME.ink,
+        "font-size": item.type === "marker" ? "12" : "13",
+        "font-weight": item.type === "marker" ? "600" : "700",
+      });
       label.textContent = title;
       group.append(label);
     }
 
     if (waiter && item.type !== "marker") {
-      const waiterLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      waiterLabel.setAttribute("x", String(centerX));
-      waiterLabel.setAttribute("y", String(centerY + 12));
-      waiterLabel.setAttribute("text-anchor", "middle");
-      waiterLabel.setAttribute("dominant-baseline", "middle");
-      waiterLabel.setAttribute("fill", stroke);
-      waiterLabel.setAttribute("font-size", "11");
-      waiterLabel.setAttribute("font-weight", "600");
+      const waiterLabel = svgEl("text", {
+        x: centerX,
+        y: centerY + 12,
+        "text-anchor": "middle",
+        "dominant-baseline": "middle",
+        fill: accent,
+        "font-size": "11",
+        "font-weight": "600",
+      });
       waiterLabel.textContent = waiter;
       group.append(waiterLabel);
     }
 
     if ((item.type === "table_round" || item.type === "table_rect") && item.seats) {
-      const seats = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      seats.setAttribute("data-layout-export-hide", "1");
-      seats.setAttribute("x", String(item.x + 6));
-      seats.setAttribute("y", String(item.y + 14));
-      seats.setAttribute("fill", "#64748b");
-      seats.setAttribute("font-size", "10");
+      const seats = svgEl("text", {
+        "data-layout-export-hide": "1",
+        x: item.x + 6,
+        y: item.y + 14,
+        fill: LAYOUT_THEME.muted,
+        "font-size": "10",
+      });
       seats.textContent = `${item.seats} lug.`;
       group.append(seats);
     }
@@ -1645,7 +1822,7 @@ function initializeLayoutEditor(root = document) {
     closeSheet();
     closeRowPanel();
     if (!selectedElement()) {
-      showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use ✎ para editar, ou arraste para mover.");
+      showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use Editar, ou arraste para mover.");
       return;
     }
     if (propsPanel) {
@@ -1786,17 +1963,29 @@ function initializeLayoutEditor(root = document) {
     if (editButton) editButton.hidden = true;
     if (grid) {
       grid.replaceChildren();
+      const shadow = shadowWaiterName();
       configuredWaiters.forEach((name, index) => {
         const label = document.createElement("label");
-        label.textContent = `Garçom ${index + 1}`;
+        const title = document.createElement("span");
+        title.className = "layout-waiter-name-title";
+        const swatch = document.createElement("span");
+        swatch.className = "layout-legend-swatch";
+        swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
+        title.append(swatch, document.createTextNode(name === shadow ? `Garçom ${index + 1} · sombra` : `Garçom ${index + 1}`));
         const input = document.createElement("input");
         input.type = "text";
         input.value = name;
-        input.placeholder = `Nome do garçom ${index + 1}`;
+        input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
         bindWaiterNameInput(input, index);
-        label.append(input);
+        label.append(title, input);
         grid.append(label);
       });
+      const divisionClone = editor.querySelector("[data-layout-division]")?.cloneNode(true);
+      if (divisionClone) {
+        bindDivisionControls(divisionClone);
+        refreshDivisionPanel(divisionClone);
+        floatSheetBody.append(divisionClone);
+      }
     }
     const done = document.createElement("button");
     done.type = "button";
@@ -1806,9 +1995,36 @@ function initializeLayoutEditor(root = document) {
     floatSheetBody.append(done);
   }
 
+  function openDivisionSheet() {
+    if (!floatSheet || !floatSheetBody) return;
+    floatSheet.hidden = false;
+    floatSheet.dataset.open = "division";
+    document.body.classList.add("layout-sheet-open");
+    if (floatSheetTitle) floatSheetTitle.textContent = "Divisão de garçons";
+    floatSheetBody.replaceChildren();
+    const panel = editor.querySelector("[data-layout-division]")?.cloneNode(true);
+    if (panel) {
+      panel.classList.remove("layout-desktop-stats");
+      bindDivisionControls(panel);
+      refreshDivisionPanel(panel);
+      floatSheetBody.append(panel);
+    }
+    const apply = floatSheetBody.querySelector("[data-layout-apply-division]");
+    if (apply) {
+      apply.addEventListener("click", () => {
+        applySuggestedDivision();
+        closeSheet();
+      });
+    }
+  }
+
   function openSheet(kind) {
     if (kind === "setup") {
       openSetupSheet();
+      return;
+    }
+    if (kind === "division") {
+      openDivisionSheet();
       return;
     }
     if (kind === "row") {
@@ -1822,7 +2038,7 @@ function initializeLayoutEditor(root = document) {
       }
       if (!floatSheet || !floatSheetBody) return;
       if (!selectedElement()) {
-        showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use ✎ para editar, ou arraste para mover.");
+        showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use Editar, ou arraste para mover.");
         return;
       }
       floatSheet.hidden = false;
@@ -1866,6 +2082,12 @@ function initializeLayoutEditor(root = document) {
       setup.addEventListener("click", () => openSheet("setup"));
       menu.append(setup);
     }
+    const division = document.createElement("button");
+    division.type = "button";
+    division.className = "button secondary full";
+    division.textContent = "Divisão de garçons";
+    division.addEventListener("click", () => openSheet("division"));
+    menu.append(division);
     [
       ["row", "Adicionar fileira de mesas"],
       ["duplicate", "Duplicar selecionado"],
@@ -2071,50 +2293,11 @@ function initializeLayoutEditor(root = document) {
     panState = null;
   });
 
-  viewport?.addEventListener("wheel", (event) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    zoomBy(event.deltaY < 0 ? 1.08 : 0.92, event.clientX, event.clientY);
-  }, { passive: false });
-
   viewport?.addEventListener("touchstart", (event) => {
-    if (event.touches.length === 2) {
-      pinchState = {
-        distance: touchDistance(event.touches),
-        scale: view.scale,
-        center: touchCenter(event.touches),
-        viewX: view.x,
-        viewY: view.y,
-        lastDistance: touchDistance(event.touches),
-      };
-      panState = null;
-    }
-  }, { passive: true });
-
-  viewport?.addEventListener("touchmove", (event) => {
-    if (event.touches.length !== 2 || !pinchState) return;
-    event.preventDefault();
-    const distance = touchDistance(event.touches);
-    const center = touchCenter(event.touches);
-    const factor = distance / pinchState.lastDistance;
-    pinchState.lastDistance = distance;
-    if (Math.abs(factor - 1) > 0.004) zoomBy(factor, center.x, center.y);
+    if (event.touches.length === 2) event.preventDefault();
   }, { passive: false });
 
-  viewport?.addEventListener("touchend", () => {
-    if (pinchState) pinchState = null;
-  });
-
-  editor.querySelectorAll("[data-layout-zoom]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const rect = viewport?.getBoundingClientRect();
-      const centerX = rect ? rect.left + rect.width / 2 : undefined;
-      const centerY = rect ? rect.top + rect.height / 2 : undefined;
-      if (button.dataset.layoutZoom === "in") zoomBy(1.2, centerX, centerY);
-      if (button.dataset.layoutZoom === "out") zoomBy(1 / 1.2, centerX, centerY);
-      if (button.dataset.layoutZoom === "reset") resetView();
-    });
-  });
+  bindDivisionControls(editor);
 
   document.addEventListener("keydown", (event) => {
     if (!editor.isConnected) return;

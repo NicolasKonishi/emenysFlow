@@ -1,9 +1,9 @@
 {{define "content"}}
 <div class="page-wrap pdf-viewer-page">
   <header class="page-header pdf-viewer-header">
-    <div><a class="back-link" href="/events/{{.Event.ID}}">← Voltar para o evento</a><span class="eyebrow">Checklist do evento</span><h1>Visualizar PDF</h1><p>{{.Event.ClientName}} · {{.Event.Name}} · {{dateTime .Event.StartsAt}}</p></div>
+    <div><a class="back-link" href="/events/{{.Event.ID}}">{{icon "back"}} Voltar para o evento</a><span class="eyebrow">Checklist do evento</span><h1>Visualizar PDF</h1><p>{{.Event.ClientName}} · {{.Event.Name}} · {{dateTime .Event.StartsAt}}</p></div>
     <div class="pdf-viewer-actions">
-      <a class="button secondary" href="/events/{{.Event.ID}}/export.pdf?download=1" download="checklist-evento-{{.Event.ID}}.pdf" hx-boost="false">↓ Baixar PDF</a>
+      <a class="button secondary" href="/events/{{.Event.ID}}/export.pdf?download=1" download="checklist-evento-{{.Event.ID}}.pdf" hx-boost="false">{{icon "download"}} Baixar PDF</a>
       <button class="button primary" type="button" data-share-pdf data-pdf-url="/events/{{.Event.ID}}/export.pdf" data-pdf-name="checklist-evento-{{.Event.ID}}.pdf" data-share-title="Checklist — {{.Event.ClientName}}">Compartilhar / WhatsApp</button>
     </div>
   </header>

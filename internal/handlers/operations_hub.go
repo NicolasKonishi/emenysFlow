@@ -59,7 +59,7 @@ func (a *App) operationHub(w http.ResponseWriter, r *http.Request) {
 		filtered = append(filtered, item)
 	}
 	checklist.Items = filtered
-	data := a.baseData(r, "Operação do evento", "events")
+	data := a.baseData(r, "Operação do evento", operationNav(r))
 	data.Event = event
 	data.Checklist = checklist
 	data.Groups = groupChecklist(checklist.Items)

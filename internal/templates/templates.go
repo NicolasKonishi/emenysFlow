@@ -54,6 +54,7 @@ func NewRenderer() *Renderer {
 		"noContainerSection":      noContainerSection,
 		"rechaudContainerID":      rechaudContainerID,
 		"shortageResolutionLabel": shortageResolutionLabel,
+		"icon":                    iconSVG,
 		"eq":                      func(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) },
 		"operationQty": func(item models.ChecklistItem, stage string) float64 {
 			switch stage {

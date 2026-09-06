@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="public-header">
-  <div class="brand"><span class="brand-mark">EF</span><span><strong>emenysFlow</strong><small>Checklist compartilhada</small></span></div>
+  <div class="brand"><span class="brand-mark">{{icon "mark"}}</span><span><strong>emenysFlow</strong><small>Checklist compartilhada</small></span></div>
   <span class="badge info">Somente leitura</span>
 </div>
 <div class="page-wrap shared-page">
@@ -19,7 +19,7 @@
     <div class="checklist-items">
       {{range .Items}}
       <article class="check-item public-item">
-        <span class="round-check {{if checklistDone .Status}}checked{{end}}">{{if checklistDone .Status}}✓{{end}}</span>
+        <span class="round-check {{if checklistDone .Status}}checked{{end}}">{{if checklistDone .Status}}{{icon "check"}}{{end}}</span>
         <div class="check-main"><strong>{{.Name}}</strong><p>{{.CategoryName}}{{if .LocationSnapshot}} · {{.LocationSnapshot}}{{end}}</p></div>
         <div class="quantity-stack"><strong>{{number .RequiredQuantity}}</strong><span>{{.Unit}}</span></div>
         <div class="availability">{{if positive .MissingQuantity}}<b>Faltam {{number .MissingQuantity}}</b>{{else}}<small class="success-text">Coberto</small>{{end}}</div>

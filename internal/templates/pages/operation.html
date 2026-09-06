@@ -1,7 +1,15 @@
 {{define "content"}}
 <div class="page-wrap operation-page {{if eq .Operation.Stage "loading"}}loading-operation{{end}}">
   <header class="page-header">
-    <div><a class="back-link" href="/events/{{.Event.ID}}">← Voltar à checklist</a><span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span><h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1><p>{{.Event.Name}} · {{.Event.Venue}}</p></div>
+    <div class="page-brand">
+      <span class="brand-mark large">{{icon "mark"}}</span>
+      <div>
+        <a class="back-link" href="/events/{{.Event.ID}}/operation">{{icon "back"}} Voltar à checklist</a>
+        <span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span>
+        <h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1>
+        <p>{{.Event.Name}} · {{.Event.Venue}}</p>
+      </div>
+    </div>
     <span class="badge {{statusClass .Event.Status}}">{{statusLabel .Event.Status}}</span>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
@@ -20,21 +28,21 @@
           <article class="mobile-loading-item {{if eq .LoadingDecision "complete"}}is-complete{{else if eq .LoadingDecision "missing"}}has-missing{{end}}" data-loading-item data-item-id="{{.ID}}" data-required="{{inputNumber .RequiredQuantity}}" data-decision="{{.LoadingDecision}}" data-save-url="/events/{{$.Event.ID}}/operation/loading/items/{{.ID}}">
             <div class="mobile-loading-copy"><span>{{.CategoryName}}</span><h3>{{.Name}}</h3><p>{{if .LocationSnapshot}}{{.LocationSnapshot}}{{else}}Localização não informada{{end}}</p></div>
             <div class="mobile-loading-required"><strong>{{number .RequiredQuantity}}</strong><span>{{.Unit}}</span></div>
-            <div class="mobile-loading-state" data-loading-state>{{if eq .LoadingDecision "complete"}}✓ Concluído{{else if eq .LoadingDecision "missing"}}Falta {{number .LoadingMissingQuantity}}{{else}}Pendente{{end}}</div>
-            <div class="mobile-loading-actions"><button class="loading-complete-button" type="button" data-loading-complete>✓ Concluído</button><button class="loading-missing-button" type="button" data-loading-missing-toggle>Falta</button></div>
+            <div class="mobile-loading-state" data-loading-state>{{if eq .LoadingDecision "complete"}}{{icon "check"}} Concluído{{else if eq .LoadingDecision "missing"}}Falta {{number .LoadingMissingQuantity}}{{else}}Pendente{{end}}</div>
+            <div class="mobile-loading-actions"><button class="loading-complete-button" type="button" data-loading-complete>{{icon "check"}} Concluído</button><button class="loading-missing-button" type="button" data-loading-missing-toggle>Falta</button></div>
             <div class="mobile-missing-editor" data-loading-missing-editor {{if not (eq .LoadingDecision "missing")}}hidden{{end}}><label>Quantidade que falta<input type="number" min="1" max="{{inputNumber .RequiredQuantity}}" step="1" value="{{if eq .LoadingDecision "missing"}}{{inputNumber .LoadingMissingQuantity}}{{else}}1{{end}}" data-loading-missing-quantity></label><button class="button danger" type="button" data-loading-missing-confirm>Confirmar falta</button></div>
             <p class="mobile-loading-error" data-loading-error role="alert"></p>
           </article>
-          {{else}}<div class="empty-state panel"><strong>Nenhum item liberado para carregamento.</strong><p>Conclua a separação e a conferência primeiro.</p></div>{{end}}
+          {{else}}<div class="empty-state panel">{{icon "checklists"}}<strong>Nenhum item liberado para carregamento.</strong><p>Conclua a separação e a conferência primeiro.</p></div>{{end}}
         </div>
       </section>
       {{end}}
 
       <section class="panel table-panel {{if eq .Operation.Stage "loading"}}loading-desktop-table{{end}}"><div class="panel-heading"><div><span class="eyebrow">Controle de quantidades</span><h2>{{len .Checklist.Items}} itens nesta etapa</h2></div></div><div class="responsive-table"><table><thead><tr><th>Item</th><th>Localização</th><th>Necessário</th><th>{{if eq .Operation.Stage "separating"}}Separado{{else if eq .Operation.Stage "checking"}}Conferido{{else}}Carregado{{end}}</th><th>Situação</th></tr></thead><tbody>{{range .Checklist.Items}}<tr><td data-label="Item"><strong>{{.Name}}</strong><small>{{.CategoryName}}</small></td><td data-label="Localização">{{.LocationSnapshot}}</td><td data-label="Necessário"><strong>{{number .RequiredQuantity}}</strong><small>{{.Unit}}</small></td><td data-label="Quantidade"><input class="quantity-input" type="number" min="0" step="1" max="{{inputNumber .RequiredQuantity}}" name="quantity_{{.ID}}" value="{{inputNumber (operationQty . $.Operation.Stage)}}"></td><td data-label="Situação">{{if and (eq $.Operation.Stage "loading") (eq .LoadingDecision "missing")}}<span class="badge danger">Falta {{number .LoadingMissingQuantity}}</span>{{else if and (eq $.Operation.Stage "loading") (eq .LoadingDecision "complete")}}<span class="badge success">Concluído</span>{{else if positive .MissingQuantity}}<span class="badge danger">Faltam {{number .MissingQuantity}}</span>{{else}}<span class="badge success">Coberto</span>{{end}}</td></tr>{{end}}</tbody></table></div></section>
     {{else}}
-      <section class="panel event-live-card"><span>◆</span><div><h2>Confirmar saída para o evento</h2><p>Os itens carregados serão marcados como “No evento” e permanecerão indisponíveis até a conferência pós-evento.</p></div></section>
+      <section class="panel event-live-card">{{icon "live"}}<div><h2>Confirmar saída para o evento</h2><p>Os itens carregados serão marcados como “No evento” e permanecerão indisponíveis até a conferência pós-evento.</p></div></section>
     {{end}}
-    <div class="form-actions"><a class="button secondary" href="/events/{{.Event.ID}}">Salvar depois</a><button class="button primary" {{if eq .Operation.Stage "loading"}}data-loading-finalize{{end}}>{{if eq .Operation.Stage "loading"}}Finalizar carregamento →{{else}}Concluir etapa e avançar →{{end}}</button></div>
+    <div class="form-actions"><a class="button secondary" href="/events/{{.Event.ID}}">Salvar depois</a><button class="button primary" {{if eq .Operation.Stage "loading"}}data-loading-finalize{{end}}>{{if eq .Operation.Stage "loading"}}Finalizar carregamento {{icon "arrow"}}{{else}}Concluir etapa e avançar {{icon "arrow"}}{{end}}</button></div>
   </form>
 </div>
 {{end}}

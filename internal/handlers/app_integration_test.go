@@ -63,6 +63,9 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 
 	checks := map[string]string{
 		"/":                    "Próximos eventos",
+		"/online":              "Próximos eventos",
+		"/offline":             "Checklists e layout das festas",
+		"/api/health":          `"ok":true`,
 		"/events":              "Cliente Demonstração",
 		"/models":              "Buffet Demonstração",
 		"/models?tab=services": "Totem fotográfico",
@@ -97,9 +100,10 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/settings":                      "Configurações",
 		"/settings/users/new":            "Novo usuário",
 		"/manifest.webmanifest":          "emenysFlow",
-		"/static/offline.html":           "Eventos disponíveis neste aparelho",
-		"/static/js/offline.js":          "buffetflow-offline",
-		"/sw.js":                         `CACHE_VERSION = "v18"`,
+		"/static/offline.html":           "Conexão restabelecida",
+		"/static/js/offline.js":          "/api/health",
+		"/static/js/layout-division.js":  "suggestFloorWaiterDivision",
+		"/sw.js":                         `CACHE_VERSION = "v31"`,
 		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}
@@ -119,13 +123,13 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		if strings.Contains(string(body), "onsubmit=") {
 			t.Errorf("GET %s rendered an inline script handler", path)
 		}
-		if path == "/" {
+		if path == "/online" {
 			policy := response.Header.Get("Content-Security-Policy")
 			if !strings.Contains(policy, "script-src 'self'") || strings.Contains(policy, "unpkg.com") {
 				t.Errorf("unexpected Content-Security-Policy: %q", policy)
 			}
 			if strings.Contains(string(body), "data-update-notice") || strings.Contains(string(body), "Uma nova versão do emenysFlow") {
-				t.Error("dashboard still rendered the obsolete application update notice")
+				t.Error("online dashboard still rendered the obsolete application update notice")
 			}
 		}
 		if path == "/events/new" && (!strings.Contains(string(body), "Itens que serão alugados") || !strings.Contains(string(body), `name="rented_decoration_color"`)) {

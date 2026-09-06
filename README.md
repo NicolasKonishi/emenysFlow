@@ -1,6 +1,6 @@
 # emenysFlow
 
-Sistema web para **planejar, calcular e operar eventos de buffet** — do cadastro do evento até o retorno dos materiais e atualização do estoque.
+Sistema web para **planejar, calcular e operar eventos de buffet** — **modo online** com o sistema completo quando o serviço responde, e **modo offline** automático (checklists salvas e organizador de layout) quando a conexão cai.
 
 Projeto pessoal que demonstra backend em Go, domínio rico, PWA offline e um fluxo operacional completo para equipes de eventos. A interface está em português; código, migrations e nomes técnicos em inglês.
 
@@ -16,8 +16,8 @@ Projeto pessoal que demonstra backend em Go, domínio rico, PWA offline e um flu
 | **Domínio** | Motor de cálculo com regras configuráveis, distribuição percentual, margens e overrides por evento |
 | **Cardápio** | Modelos versionados, snapshots por evento, grupos de escolha, receitas e personalização sem alterar o modelo original |
 | **Operação** | Checklist idempotente, reserva de estoque, separação, carregamento mobile, retorno transacional |
-| **Offline** | PWA com Service Worker, IndexedDB, fila idempotente, conflitos e sync automático |
-| **Layout** | Editor de planta do salão (mesas, áreas, equipamentos) por evento ou avulso |
+| **Offline** | Área própria com checklists salvas, layout das festas, IndexedDB e sync opcional |
+| **Layout** | Organizador de planta do salão (mesas, áreas, equipamentos) por evento ou avulso |
 | **Qualidade** | Testes unitários e de integração nas regras críticas; migrations SQL versionadas |
 
 ---
@@ -25,7 +25,8 @@ Projeto pessoal que demonstra backend em Go, domínio rico, PWA offline e um flu
 ## Fluxo operacional
 
 ```text
-Planejamento → Cálculo → Reserva → Separação → Carregamento → Evento → Retorno → Estoque
+Online: Evento → Cálculo → Reserva → Estoque
+Offline: Checklist salva → Separação → Carregamento → Layout do salão → sync opcional
 ```
 
 O sistema cobre:
@@ -37,8 +38,9 @@ O sistema cobre:
 - regras de cálculo editáveis (garçons, descartáveis, bebidas, equipamentos);
 - checklist recalculável com ajustes manuais auditáveis;
 - PDF, CSV, impressão e link público somente leitura;
-- hub operacional offline para separação e carregamento no celular;
-- layouts de salão editáveis e sincronizáveis.
+- modo online automático com o sistema completo enquanto o serviço responde;
+- modo offline automático, limitado a checklists salvas e layout, quando o serviço some;
+- aviso para reabrir o online assim que a conexão volta.
 
 Detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/OFFLINE.md](docs/OFFLINE.md).
 

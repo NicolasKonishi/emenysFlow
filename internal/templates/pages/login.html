@@ -1,10 +1,10 @@
 {{define "content"}}
 <section class="login-card">
-  <div class="login-brand"><span class="brand-mark large">EF</span><div><strong>emenysFlow</strong><small>Operação em ordem</small></div></div>
+  <div class="login-brand"><span class="brand-mark large">{{icon "mark"}}</span><div><strong>emenysFlow</strong><small>Operação em ordem</small></div></div>
   <div class="login-intro">
     <span class="eyebrow">Bem-vindo de volta</span>
     <h1>Entre para organizar o próximo evento.</h1>
-    <p>Planejamento, estoque e conferência em uma única rotina.</p>
+    <p>Com conexão, o sistema completo. Sem conexão, checklists e layout no aparelho.</p>
   </div>
   {{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
   {{if .Flash}}<div class="alert info" role="status">{{.Flash}}</div>{{end}}

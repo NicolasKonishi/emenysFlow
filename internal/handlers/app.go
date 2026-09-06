@@ -102,6 +102,7 @@ type PageData struct {
 	IsEdit                   bool
 	MenuCustomized           bool
 	FormAction               string
+	Workspace                string
 }
 
 func New(store *repositories.Store, auth *services.AuthService, checklist *services.ChecklistService, logger *slog.Logger, location *time.Location) *App {
@@ -116,9 +117,13 @@ func (a *App) Routes() http.Handler {
 	root.HandleFunc("GET /login", a.loginPage)
 	root.HandleFunc("POST /login", a.login)
 	root.HandleFunc("GET /share/{token}", a.sharedEvent)
+	root.HandleFunc("GET /api/health", a.health)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("GET /", a.dashboard)
+	protected.HandleFunc("GET /", a.onlineDashboard)
+	protected.HandleFunc("GET /online", a.onlineDashboard)
+	protected.HandleFunc("GET /offline", a.offlineHub)
+	protected.HandleFunc("POST /workspace", a.setWorkspace)
 	protected.HandleFunc("POST /logout", a.logout)
 	protected.HandleFunc("GET /events", a.events)
 	protected.HandleFunc("GET /models", a.modelsPage)
@@ -274,10 +279,14 @@ func (a *App) baseData(request *http.Request, title, nav string) PageData {
 	if user, ok := request.Context().Value(userContextKey).(models.User); ok {
 		data.User = user
 	}
+	data.Workspace = workspaceFor(request, nav)
 	return data
 }
 
 func (a *App) render(writer http.ResponseWriter, request *http.Request, page string, data PageData) {
+	if data.Workspace != "" {
+		setWorkspaceCookie(writer, data.Workspace)
+	}
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.renderer.Render(writer, page, data, request.Header.Get("HX-Request") == "true"); err != nil {
 		a.logger.Error("render page", "page", page, "error", err)

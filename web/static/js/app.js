@@ -247,7 +247,7 @@ function initializeMobileLoading(root = document) {
         card.classList.toggle("is-complete", result.decision === "complete");
         card.classList.toggle("has-missing", result.decision === "missing");
         const state = card.querySelector("[data-loading-state]");
-        if (state) state.textContent = result.decision === "complete" ? "✓ Concluído" : `Falta ${formatter.format(result.missing_quantity)}`;
+        if (state) state.innerHTML = result.decision === "complete" ? `${window.emenysIcon ? window.emenysIcon("check") : ""} Concluído` : `Falta ${formatter.format(result.missing_quantity)}`;
         const editor = card.querySelector("[data-loading-missing-editor]");
         if (editor) editor.hidden = true;
         const hiddenQuantity = form ? form.querySelector(`input[name="quantity_${card.dataset.itemId}"]`) : null;

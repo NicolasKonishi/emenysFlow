@@ -1,22 +1,28 @@
 {{define "content"}}
 <div class="page-wrap">
   <header class="page-header dashboard-heading">
-    <div><span class="eyebrow">Operação de hoje</span><h1>Olá, {{.User.Name}}.</h1><p>Acompanhe o que precisa de atenção na operação.</p></div>
-    <a class="button primary" href="/events/new"><span>＋</span>Novo evento</a>
+    <div>
+      <span class="eyebrow">Sistema completo</span>
+      <h1>Olá, {{.User.Name}}.</h1>
+      <p>Você está conectado ao emenysFlow. Se a conexão cair, o modo offline abre sozinho com checklists e layout.</p>
+    </div>
+    <div class="page-header-actions">
+      <a class="button primary" href="/events/new">{{icon "plus"}}Novo evento</a>
+    </div>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}
   {{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
 
   <section class="metric-grid" aria-label="Indicadores principais">
-    <article class="metric-card critical"><span class="metric-icon">!</span><div><strong>{{.Dashboard.EventsWithShortages}}</strong><span>eventos com faltas</span></div><a href="/events">Ver eventos</a></article>
-    <article class="metric-card"><span class="metric-icon">✓</span><div><strong>{{.Dashboard.AwaitingSeparation}}</strong><span>aguardando separação</span></div><a href="/events">Abrir fila</a></article>
-    <article class="metric-card warm"><span class="metric-icon">↩</span><div><strong>{{.Dashboard.AwaitingReturn}}</strong><span>aguardando retorno</span></div><a href="/events">Conferir</a></article>
-    <article class="metric-card"><span class="metric-icon">▤</span><div><strong>{{.Dashboard.BelowMinimumStock}}</strong><span>abaixo do mínimo</span></div><a href="/inventory">Ver estoque</a></article>
+    <article class="metric-card critical"><span class="metric-icon">{{icon "warning"}}</span><div><strong>{{.Dashboard.EventsWithShortages}}</strong><span>eventos com faltas</span></div><a href="/events">Ver eventos</a></article>
+    <article class="metric-card"><span class="metric-icon">{{icon "check"}}</span><div><strong>{{.Dashboard.AwaitingSeparation}}</strong><span>aguardando separação</span></div><a href="/events">Abrir fila</a></article>
+    <article class="metric-card warm"><span class="metric-icon">{{icon "return"}}</span><div><strong>{{.Dashboard.AwaitingReturn}}</strong><span>aguardando retorno</span></div><a href="/events">Conferir</a></article>
+    <article class="metric-card"><span class="metric-icon">{{icon "inventory"}}</span><div><strong>{{.Dashboard.BelowMinimumStock}}</strong><span>abaixo do mínimo</span></div><a href="/inventory">Ver estoque</a></article>
   </section>
 
   <div class="dashboard-grid">
     <section class="panel upcoming-panel">
-      <div class="panel-heading"><div><span class="eyebrow">Agenda operacional</span><h2>Próximos eventos</h2></div><a class="text-link" href="/events">Ver todos →</a></div>
+      <div class="panel-heading"><div><span class="eyebrow">Agenda</span><h2>Próximos eventos</h2></div><a class="text-link" href="/events">Ver todos {{icon "arrow"}}</a></div>
       {{if .Dashboard.UpcomingEvents}}
       <div class="event-list compact-list">
         {{range .Dashboard.UpcomingEvents}}
@@ -33,13 +39,12 @@
     <aside class="panel attention-panel">
       <div class="panel-heading"><div><span class="eyebrow">Estoque</span><h2>Pontos de atenção</h2></div></div>
       <ul class="attention-list">
-        <li><span class="attention-dot danger"></span><div><strong>{{.Dashboard.DamagedItems}} itens danificados</strong><small>Indisponíveis para novas reservas</small></div><a href="/inventory">→</a></li>
-        <li><span class="attention-dot warning"></span><div><strong>{{.Dashboard.RentalsDue}} aluguéis próximos</strong><small>Devolução nos próximos três dias</small></div><a href="/inventory">→</a></li>
-        <li><span class="attention-dot danger"></span><div><strong>{{.Dashboard.PendingPurchases}} compras e {{.Dashboard.PendingRentals}} aluguéis pendentes</strong><small>Faltas ainda não solucionadas nos eventos</small></div><a href="/events">→</a></li>
-        <li><span class="attention-dot info"></span><div><strong>{{.Dashboard.BelowMinimumStock}} estoques baixos</strong><small>Planeje compras e reposições</small></div><a href="/inventory">→</a></li>
+        <li><span class="attention-dot danger"></span><div><strong>{{.Dashboard.DamagedItems}} itens danificados</strong><small>Indisponíveis para novas reservas</small></div><a href="/inventory">{{icon "arrow"}}</a></li>
+        <li><span class="attention-dot warning"></span><div><strong>{{.Dashboard.RentalsDue}} aluguéis próximos</strong><small>Devolução nos próximos três dias</small></div><a href="/inventory">{{icon "arrow"}}</a></li>
+        <li><span class="attention-dot danger"></span><div><strong>{{.Dashboard.PendingPurchases}} compras e {{.Dashboard.PendingRentals}} aluguéis pendentes</strong><small>Faltas ainda não solucionadas nos eventos</small></div><a href="/events">{{icon "arrow"}}</a></li>
+        <li><span class="attention-dot info"></span><div><strong>{{.Dashboard.BelowMinimumStock}} estoques baixos</strong><small>Planeje compras e reposições</small></div><a href="/inventory">{{icon "arrow"}}</a></li>
         <a class="button secondary full" href="/inventory">Abrir controle de estoque</a>
       </ul>
-
     </aside>
   </div>
 </div>

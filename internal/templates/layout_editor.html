@@ -34,22 +34,33 @@
       <label>Nome do layout<input name="name" value="{{.StandaloneLayout.Name}}" required placeholder="Ex.: Casamento Silva — salão principal"></label>
       <label>Local / espaço<input name="venue" value="{{.StandaloneLayout.Venue}}" placeholder="Ex.: Espaço Vale das Águas"></label>
       <label>Convidados previstos<input type="number" min="0" name="guest_count" value="{{.StandaloneLayout.GuestCount}}" placeholder="Opcional"></label>
-      <label>Quantidade de garçons<input type="number" min="0" max="30" name="waiter_count" data-layout-waiter-count value="{{if .StandaloneLayout.WaiterCount}}{{.StandaloneLayout.WaiterCount}}{{else}}6{{end}}"></label>
-    </div>
-    <div class="layout-waiter-names" data-layout-waiter-names>
-      <div class="layout-waiter-names-header">
-        <div class="section-heading-inline"><span class="eyebrow">Equipe de garçons</span><p>Defina os nomes para aparecerem na legenda e na seleção das mesas.</p></div>
-        <button type="button" class="button secondary small" data-layout-waiter-edit>Editar garçons</button>
-      </div>
-      <div class="layout-waiter-name-grid" data-layout-waiter-name-grid hidden></div>
     </div>
   </form>
   {{end}}
 
+  <section class="panel layout-waiter-roster layout-desktop-meta" data-layout-waiter-roster>
+    <div class="layout-waiter-count-row">
+      <label>Quantidade de garçons
+        <div class="layout-stepper">
+          <button type="button" class="layout-stepper-btn" data-layout-waiter-step="-1" aria-label="Diminuir garçons">{{icon "minus"}}</button>
+          <input type="number" min="0" max="30" inputmode="numeric" name="waiter_count" data-layout-waiter-count value="{{if eq .LayoutMode "standalone"}}{{if .StandaloneLayout.WaiterCount}}{{.StandaloneLayout.WaiterCount}}{{else}}6{{end}}{{else}}{{.StaffSummary.Waiters}}{{end}}">
+          <button type="button" class="layout-stepper-btn" data-layout-waiter-step="1" aria-label="Aumentar garçons">{{icon "plus"}}</button>
+        </div>
+      </label>
+      <p class="layout-waiter-hint">A lista embaixo muda na hora. O último fica de sombra dos noivos.</p>
+    </div>
+    <div class="layout-waiter-names" data-layout-waiter-names>
+      <div class="layout-waiter-names-header">
+        <div class="section-heading-inline"><span class="eyebrow">Equipe de garçons</span><p>Nomeie cada um se quiser. As cores da planta acompanham esta lista.</p></div>
+      </div>
+      <div class="layout-waiter-name-grid" data-layout-waiter-name-grid></div>
+    </div>
+  </section>
+
   <div class="layout-planner-stats panel layout-desktop-stats">
     <div><span>Mesas</span><strong data-layout-stat="tables">0</strong></div>
-    {{if eq .LayoutMode "event"}}<div><span>Convidados previstos</span><strong>{{.Event.GuestCount}}</strong></div><div><span>Garçons calculados</span><strong>{{.StaffSummary.Waiters}}</strong></div>
-    {{else}}<div><span>Convidados previstos</span><strong data-layout-stat="guests">{{.StandaloneLayout.GuestCount}}</strong></div><div><span>Garçons cadastrados</span><strong data-layout-stat="configured-waiters">{{.StandaloneLayout.WaiterCount}}</strong></div>{{end}}
+    {{if eq .LayoutMode "event"}}<div><span>Convidados previstos</span><strong>{{.Event.GuestCount}}</strong></div><div><span>Garçons na planta</span><strong data-layout-stat="configured-waiters">{{.StaffSummary.Waiters}}</strong></div>
+    {{else}}<div><span>Convidados previstos</span><strong data-layout-stat="guests">{{.StandaloneLayout.GuestCount}}</strong></div><div><span>Garçons na planta</span><strong data-layout-stat="configured-waiters">{{if .StandaloneLayout.WaiterCount}}{{.StandaloneLayout.WaiterCount}}{{else}}6{{end}}</strong></div>{{end}}
     <div><span>Garçons atribuídos</span><strong data-layout-stat="waiters">0</strong></div>
   </div>
 

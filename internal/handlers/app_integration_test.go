@@ -62,7 +62,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":                    "Próximos eventos",
+		"/":                    "Como você quer trabalhar agora?",
 		"/online":              "Próximos eventos",
 		"/offline":             "Checklists e layout das festas",
 		"/api/health":          `"ok":true`,
@@ -92,7 +92,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/events/1/layout":               "Layout do salão",
 		"/layouts":                       "Layouts do salão",
 		"/layouts/new":                   "Novo layout avulso",
-		"/events/1/operation":            "Sincronizar agora",
+		"/events/1/operation":            "data-simple-checklist",
 		"/events/1/operation/separating": "Separação do estoque",
 		"/events/1/operation/loading":    "Checklist rápido para a van",
 		"/events/1/return":               "Retorno dos itens",
@@ -103,7 +103,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/static/offline.html":           "Conexão restabelecida",
 		"/static/js/offline.js":          "/api/health",
 		"/static/js/layout-division.js":  "suggestFloorWaiterDivision",
-		"/sw.js":                         `CACHE_VERSION = "v31"`,
+		"/sw.js":                         `CACHE_VERSION = "v35"`,
 		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}

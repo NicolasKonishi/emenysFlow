@@ -120,7 +120,7 @@ func (a *App) Routes() http.Handler {
 	root.HandleFunc("GET /api/health", a.health)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("GET /", a.onlineDashboard)
+	protected.HandleFunc("GET /", a.workspaceChooser)
 	protected.HandleFunc("GET /online", a.onlineDashboard)
 	protected.HandleFunc("GET /offline", a.offlineHub)
 	protected.HandleFunc("POST /workspace", a.setWorkspace)

@@ -4,9 +4,10 @@
     <div>
       <span class="eyebrow">Sistema completo</span>
       <h1>Olá, {{.User.Name}}.</h1>
-      <p>Você está conectado ao emenysFlow. Se a conexão cair, o modo offline abre sozinho com checklists e layout.</p>
+      <p>Você está no sistema completo. Abra o modo offline para checklists e layout, ou deixe o aparelho trocar sozinho se a conexão cair.</p>
     </div>
     <div class="page-header-actions">
+      <form action="/workspace" method="post"><input type="hidden" name="workspace" value="offline"><button class="button ghost" type="submit">Abrir modo offline</button></form>
       <a class="button primary" href="/events/new">{{icon "plus"}}Novo evento</a>
     </div>
   </header>

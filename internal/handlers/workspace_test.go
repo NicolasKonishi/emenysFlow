@@ -20,6 +20,9 @@ import (
 
 func TestWorkspaceForUsesNavAndCookie(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	if got := workspaceFor(request, "workspace"); got != "" {
+		t.Fatalf("chooser workspace %q", got)
+	}
 	if got := workspaceFor(request, "events"); got != "online" {
 		t.Fatalf("events workspace %q", got)
 	}
@@ -106,7 +109,7 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":        "Próximos eventos",
+		"/":        "Como você quer trabalhar agora?",
 		"/online":  "Próximos eventos",
 		"/offline": "Checklists e layout das festas",
 	}
@@ -131,10 +134,23 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 	home, _ := io.ReadAll(response.Body)
 	response.Body.Close()
-	if !strings.Contains(string(home), "workspace-online") {
-		t.Fatal("home should render the full online workspace")
+	if !strings.Contains(string(home), "workspace-chooser") {
+		t.Fatal("home should render the workspace chooser")
 	}
-	if !strings.Contains(string(home), "href=\"/layouts\"") {
+	if !strings.Contains(string(home), "Entrar no modo offline") {
+		t.Fatal("chooser should offer the offline workspace")
+	}
+
+	response, err = client.Get(server.URL + "/online")
+	if err != nil {
+		t.Fatal(err)
+	}
+	online, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if !strings.Contains(string(online), "workspace-online") {
+		t.Fatal("online dashboard should render the full online workspace")
+	}
+	if !strings.Contains(string(online), "href=\"/layouts\"") {
 		t.Fatal("online workspace should include layouts")
 	}
 

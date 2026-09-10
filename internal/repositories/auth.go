@@ -9,15 +9,19 @@ import (
 	"buffetflow/internal/models"
 )
 
-func (s *Store) EnsureDemoAdmin(ctx context.Context, passwordHash string) error {
+func (s *Store) EnsureInitialAdmin(ctx context.Context, email, passwordHash string) error {
 	now := nowString()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO users(name, email, password_hash, role, access_role, active, created_at, updated_at)
-		VALUES('Administrador', 'admin@buffet.local', ?, 'admin', 'admin', 1, ?, ?)
-		ON CONFLICT(email) DO NOTHING`, passwordHash, now, now)
+		VALUES('Administrador', ?, ?, 'admin', 'admin', 1, ?, ?)
+		ON CONFLICT(email) DO NOTHING`, email, passwordHash, now, now)
 	if err != nil {
-		return fmt.Errorf("ensure demo admin: %w", err)
+		return fmt.Errorf("ensure initial admin: %w", err)
 	}
-	return s.EnsureUserHasRoleByEmail(ctx, "admin@buffet.local", models.RoleAdmin)
+	return s.EnsureUserHasRoleByEmail(ctx, email, models.RoleAdmin)
+}
+
+func (s *Store) EnsureDemoAdmin(ctx context.Context, passwordHash string) error {
+	return s.EnsureInitialAdmin(ctx, "admin@buffet.local", passwordHash)
 }
 
 func (s *Store) UserByID(ctx context.Context, id int64) (models.User, error) {

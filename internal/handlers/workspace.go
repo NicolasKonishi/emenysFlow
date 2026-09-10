@@ -50,7 +50,7 @@ func normalizeWorkspace(value string) string {
 	}
 }
 
-func setWorkspaceCookie(writer http.ResponseWriter, workspace string) {
+func setWorkspaceCookie(writer http.ResponseWriter, workspace string, secure bool) {
 	workspace = normalizeWorkspace(workspace)
 	if workspace == "" {
 		return
@@ -63,6 +63,7 @@ func setWorkspaceCookie(writer http.ResponseWriter, workspace string) {
 		MaxAge:   365 * 24 * 60 * 60,
 		HttpOnly: false,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   secure,
 	})
 }
 
@@ -76,7 +77,7 @@ func (a *App) redirectOnlineHome(writer http.ResponseWriter, request *http.Reque
 }
 
 func (a *App) onlineDashboard(writer http.ResponseWriter, request *http.Request) {
-	setWorkspaceCookie(writer, "online")
+	setWorkspaceCookie(writer, "online", a.secureCookies)
 	data := a.baseData(request, "Visão geral", "dashboard")
 	data.Workspace = "online"
 	dashboard, err := a.store.Dashboard(request.Context())
@@ -89,7 +90,7 @@ func (a *App) onlineDashboard(writer http.ResponseWriter, request *http.Request)
 }
 
 func (a *App) offlineHub(writer http.ResponseWriter, request *http.Request) {
-	setWorkspaceCookie(writer, "offline")
+	setWorkspaceCookie(writer, "offline", a.secureCookies)
 	data := a.baseData(request, "Modo offline", "offline")
 	data.Workspace = "offline"
 	data.Query = request.URL.Query().Get("q")
@@ -118,7 +119,7 @@ func (a *App) setWorkspace(writer http.ResponseWriter, request *http.Request) {
 		a.redirect(writer, request, "/", http.StatusSeeOther)
 		return
 	}
-	setWorkspaceCookie(writer, workspace)
+	setWorkspaceCookie(writer, workspace, a.secureCookies)
 	if workspace == "offline" {
 		a.redirect(writer, request, "/offline", http.StatusSeeOther)
 		return

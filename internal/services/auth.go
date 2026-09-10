@@ -86,11 +86,20 @@ func pbkdf2SHA256(password, salt []byte, iterations, keyLength int) []byte {
 }
 
 func (s *AuthService) EnsureDemoAdmin(ctx context.Context) error {
-	hash, err := HashPassword("admin123")
+	return s.EnsureInitialAdmin(ctx, "admin@buffet.local", "admin123")
+}
+
+// EnsureInitialAdmin creates an administrator only if its email does not yet
+// exist. Production callers must provide a secret outside source control.
+func (s *AuthService) EnsureInitialAdmin(ctx context.Context, email, password string) error {
+	if strings.TrimSpace(email) == "" {
+		return fmt.Errorf("administrator email is required")
+	}
+	hash, err := HashPassword(password)
 	if err != nil {
 		return err
 	}
-	return s.store.EnsureDemoAdmin(ctx, hash)
+	return s.store.EnsureInitialAdmin(ctx, strings.TrimSpace(email), hash)
 }
 
 func (s *AuthService) Login(ctx context.Context, userID int64, password string) (models.User, string, time.Time, error) {

@@ -23,6 +23,10 @@ type offlineEventBundle struct {
 }
 
 func (a *App) offlineBootstrap(w http.ResponseWriter, r *http.Request) {
+	if err := a.requirePermission(r, models.PermChecklist); err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "Acesso restrito para o seu perfil."})
+		return
+	}
 	user := currentUser(r)
 	events, err := a.store.ListEvents(r.Context(), "")
 	if err != nil {
@@ -59,6 +63,10 @@ func (a *App) syncOperations(w http.ResponseWriter, r *http.Request) {
 	user := currentUser(r)
 	results := make([]models.SyncOperationResult, 0, len(requests))
 	for _, request := range requests {
+		if err := a.requirePermission(r, syncOperationPermission(request.OperationType)); err != nil {
+			results = append(results, models.SyncOperationResult{ClientOperationID: request.ClientOperationID, EntityID: request.EntityID, Status: "failed", Error: "Acesso restrito para esta operação."})
+			continue
+		}
 		if request.DeviceID == "" || request.ClientOperationID == "" {
 			results = append(results, models.SyncOperationResult{ClientOperationID: request.ClientOperationID, Status: "failed", Error: "Identificação da operação ausente."})
 			continue
@@ -74,6 +82,17 @@ func (a *App) syncOperations(w http.ResponseWriter, r *http.Request) {
 		results = append(results, result)
 	}
 	writeJSON(w, 200, map[string]any{"results": results, "synced_at": time.Now().UTC()})
+}
+
+func syncOperationPermission(operationType string) string {
+	switch operationType {
+	case "update_event_draft":
+		return models.PermEventEdit
+	case "save_event_layout", "save_standalone_layout":
+		return models.PermLayouts
+	default:
+		return models.PermChecklist
+	}
 }
 
 func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRequest, user models.User) models.SyncOperationResult {

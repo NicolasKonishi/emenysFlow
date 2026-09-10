@@ -1,0 +1,47 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PUBLIC_URL: https://${DOMAIN}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD}
+    volumes:
+      - app_data:/var/lib/emenys
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - private
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - private
+
+volumes:
+  app_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  private:
+    internal: true

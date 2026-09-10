@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -24,12 +26,24 @@ type contextKey string
 const userContextKey contextKey = "user"
 
 type App struct {
-	store     *repositories.Store
-	auth      *services.AuthService
-	checklist *services.ChecklistService
-	renderer  *templates.Renderer
-	logger    *slog.Logger
-	location  *time.Location
+	store         *repositories.Store
+	auth          *services.AuthService
+	checklist     *services.ChecklistService
+	renderer      *templates.Renderer
+	logger        *slog.Logger
+	location      *time.Location
+	secureCookies bool
+	publicURL     *url.URL
+	uploadsDir    string
+	loginLimiter  *loginLimiter
+}
+
+// Config contains the settings that change when the application is exposed to
+// the internet. Local development deliberately keeps the zero-value settings.
+type Config struct {
+	SecureCookies bool
+	PublicURL     string
+	UploadsDir    string
 }
 
 type PageData struct {
@@ -109,7 +123,31 @@ type PageData struct {
 }
 
 func New(store *repositories.Store, auth *services.AuthService, checklist *services.ChecklistService, logger *slog.Logger, location *time.Location) *App {
-	return &App{store: store, auth: auth, checklist: checklist, renderer: templates.NewRenderer(), logger: logger, location: location}
+	app, err := NewWithConfig(store, auth, checklist, logger, location, Config{})
+	if err != nil {
+		panic(err)
+	}
+	return app
+}
+
+func NewWithConfig(store *repositories.Store, auth *services.AuthService, checklist *services.ChecklistService, logger *slog.Logger, location *time.Location, config Config) (*App, error) {
+	var publicURL *url.URL
+	if value := strings.TrimSpace(config.PublicURL); value != "" {
+		parsed, err := url.Parse(value)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+			return nil, fmt.Errorf("invalid public URL")
+		}
+		parsed.Path = ""
+		publicURL = parsed
+	}
+	uploadsDir := config.UploadsDir
+	if uploadsDir == "" {
+		uploadsDir = filepath.Join("data", "uploads")
+	}
+	return &App{
+		store: store, auth: auth, checklist: checklist, renderer: templates.NewRenderer(), logger: logger, location: location,
+		secureCookies: config.SecureCookies, publicURL: publicURL, uploadsDir: uploadsDir, loginLimiter: newLoginLimiter(),
+	}, nil
 }
 
 func (a *App) Routes() http.Handler {
@@ -306,7 +344,7 @@ func (a *App) baseData(request *http.Request, title, nav string) PageData {
 
 func (a *App) render(writer http.ResponseWriter, request *http.Request, page string, data PageData) {
 	if data.Workspace != "" {
-		setWorkspaceCookie(writer, data.Workspace)
+		setWorkspaceCookie(writer, data.Workspace, a.secureCookies)
 	}
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.renderer.Render(writer, page, data, request.Header.Get("HX-Request") == "true"); err != nil {
@@ -316,6 +354,7 @@ func (a *App) render(writer http.ResponseWriter, request *http.Request, page str
 
 func (a *App) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Cache-Control", "no-store")
 		cookie, err := request.Cookie("buffet_session")
 		if err != nil {
 			a.redirect(writer, request, "/login", http.StatusSeeOther)
@@ -323,7 +362,7 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 		}
 		user, err := a.auth.Authenticate(request.Context(), cookie.Value)
 		if err != nil || !user.Active {
-			http.SetCookie(writer, &http.Cookie{Name: "buffet_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+			http.SetCookie(writer, &http.Cookie{Name: "buffet_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: a.secureCookies})
 			a.redirect(writer, request, "/login", http.StatusSeeOther)
 			return
 		}
@@ -345,16 +384,52 @@ func (a *App) securityHeaders(next http.Handler) http.Handler {
 		}
 		writer.Header().Set("Referrer-Policy", "same-origin")
 		writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		writer.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		writer.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		writer.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
-		if request.Method == http.MethodPost && request.Header.Get("Origin") != "" {
+		if a.secureCookies {
+			writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		if request.URL.Path == "/login" || strings.HasPrefix(request.URL.Path, "/share/") {
+			writer.Header().Set("Cache-Control", "no-store")
+		}
+		if request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions {
 			origin := request.Header.Get("Origin")
-			if !strings.HasSuffix(origin, "://"+request.Host) {
+			if (a.secureCookies && origin == "") || (origin != "" && !a.validOrigin(origin, request)) {
 				http.Error(writer, "Origem inválida.", http.StatusForbidden)
 				return
 			}
 		}
 		next.ServeHTTP(writer, request)
 	})
+}
+
+func (a *App) validOrigin(origin string, request *http.Request) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	expected := a.publicURL
+	if expected == nil {
+		scheme := "http"
+		if request.TLS != nil {
+			scheme = "https"
+		}
+		expected = &url.URL{Scheme: scheme, Host: request.Host}
+	}
+	return strings.EqualFold(parsed.Scheme, expected.Scheme) && strings.EqualFold(parsed.Host, expected.Host)
+}
+
+func (a *App) publicBaseURL(request *http.Request) string {
+	if a.publicURL != nil {
+		return a.publicURL.String()
+	}
+	scheme := "http"
+	if request.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + request.Host
 }
 
 func (a *App) redirect(writer http.ResponseWriter, request *http.Request, target string, status int) {

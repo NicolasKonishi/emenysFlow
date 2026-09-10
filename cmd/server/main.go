@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,6 +29,26 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	production := strings.EqualFold(os.Getenv("APP_ENV"), "production")
+	adminEmail := strings.TrimSpace(os.Getenv("APP_ADMIN_EMAIL"))
+	adminPassword := os.Getenv("APP_ADMIN_PASSWORD")
+	publicURL := strings.TrimSpace(os.Getenv("APP_PUBLIC_URL"))
+	if production {
+		if publicURL == "" || !strings.HasPrefix(strings.ToLower(publicURL), "https://") {
+			logger.Error("invalid production configuration", "error", "APP_PUBLIC_URL must be an HTTPS URL")
+			os.Exit(1)
+		}
+		if len(adminPassword) < 14 {
+			logger.Error("invalid production configuration", "error", "APP_ADMIN_PASSWORD must contain at least 14 characters")
+			os.Exit(1)
+		}
+	}
+	if adminEmail == "" {
+		adminEmail = "admin@buffet.local"
+	}
+	if adminPassword == "" {
+		adminPassword = "admin123"
+	}
 	location, err := time.LoadLocation(timezone)
 	if err != nil {
 		logger.Error("load timezone", "error", err)
@@ -56,7 +77,7 @@ func main() {
 	}
 	store := repositories.New(db)
 	authService := services.NewAuthService(store)
-	if err := authService.EnsureDemoAdmin(ctx); err != nil {
+	if err := authService.EnsureInitialAdmin(ctx, adminEmail, adminPassword); err != nil {
 		logger.Error("seed administrator", "error", err)
 		os.Exit(1)
 	}
@@ -75,7 +96,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	app := handlers.New(store, authService, checklistService, logger, location)
+	app, err := handlers.NewWithConfig(store, authService, checklistService, logger, location, handlers.Config{
+		SecureCookies: production,
+		PublicURL:     publicURL,
+		UploadsDir:    filepath.Join(filepath.Dir(databasePath), "uploads"),
+	})
+	if err != nil {
+		logger.Error("configure application", "error", err)
+		os.Exit(1)
+	}
 	server := &http.Server{
 		Addr:              address,
 		Handler:           app.Routes(),

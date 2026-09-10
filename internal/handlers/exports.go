@@ -110,11 +110,7 @@ func (a *App) createEventShare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, databaseErrorMessage(err), 500)
 		return
 	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	shareURL := scheme + "://" + r.Host + "/share/" + token
+	shareURL := a.publicBaseURL(r) + "/share/" + token
 	a.redirect(w, r, fmt.Sprintf("/events/%d?message=%s", id, url.QueryEscape("Link somente leitura: "+shareURL)), http.StatusSeeOther)
 }
 

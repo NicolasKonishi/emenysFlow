@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,12 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+// migrationFiles keeps the schema with the executable. A production image
+// therefore does not need to ship the source tree just to initialize SQLite.
+//
+//go:embed migrations/*.sql
+var migrationFiles embed.FS
 
 func Open(path string) (*sql.DB, error) {
 	dsn := path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
@@ -38,8 +45,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("create migration ledger: %w", err)
 	}
 
-	migrationsPath := migrationDirectory()
-	entries, err := os.ReadDir(migrationsPath)
+	entries, err := migrationFiles.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("read embedded migrations: %w", err)
 	}
@@ -49,7 +55,11 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
-		if err := applySQLFile(ctx, db, "schema_migrations", filepath.Join(migrationsPath, entry.Name()), entry.Name()); err != nil {
+		body, err := migrationFiles.ReadFile(filepath.Join("migrations", entry.Name()))
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", entry.Name(), err)
+		}
+		if err := applySQL(ctx, db, "schema_migrations", body, entry.Name()); err != nil {
 			return fmt.Errorf("migration %s: %w", entry.Name(), err)
 		}
 	}
@@ -80,6 +90,14 @@ func ApplyPrivateSeeds(ctx context.Context, db *sql.DB) error {
 }
 
 func applySQLFile(ctx context.Context, db *sql.DB, ledgerTable, path, version string) error {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+	return applySQL(ctx, db, ledgerTable, body, version)
+}
+
+func applySQL(ctx context.Context, db *sql.DB, ledgerTable string, body []byte, version string) error {
 	if _, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		version TEXT PRIMARY KEY,
 		applied_at TEXT NOT NULL
@@ -96,10 +114,6 @@ func applySQLFile(ctx context.Context, db *sql.DB, ledgerTable, path, version st
 		return nil
 	}
 
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read file: %w", err)
-	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -124,14 +138,6 @@ func privateSeedDirectory() string {
 		return filepath.Join("internal", "database", "seeds", "private")
 	}
 	return filepath.Join(filepath.Dir(sourceFile), "seeds", "private")
-}
-
-func migrationDirectory() string {
-	_, sourceFile, _, ok := runtime.Caller(0)
-	if !ok {
-		return filepath.Join("internal", "database", "migrations")
-	}
-	return filepath.Join(filepath.Dir(sourceFile), "migrations")
 }
 
 func IsNotFound(err error) bool {

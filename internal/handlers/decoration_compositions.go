@@ -144,7 +144,7 @@ func (a *App) decorationPhotosUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		random := make([]byte, 16)
 		_, _ = rand.Read(random)
-		directory := filepath.Join("data", "uploads", "events", strconv.FormatInt(eventID, 10))
+		directory := filepath.Join(a.uploadsDir, "events", strconv.FormatInt(eventID, 10))
 		if mkdirErr := os.MkdirAll(directory, 0o750); mkdirErr != nil {
 			source.Close()
 			err = mkdirErr
@@ -195,7 +195,7 @@ func (a *App) referencePhotoView(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	root, _ := filepath.Abs(filepath.Join("data", "uploads"))
+	root, _ := filepath.Abs(a.uploadsDir)
 	if !strings.HasPrefix(absolute, root+string(os.PathSeparator)) {
 		http.NotFound(w, r)
 		return

@@ -22,3 +22,13 @@ func TestItemColor(t *testing.T) {
 		}
 	}
 }
+
+func TestOmitEventMenuItem(t *testing.T) {
+	t.Parallel()
+	if !omitEventMenuItem("Metriê") || !omitEventMenuItem("Garçons") {
+		t.Fatal("staff extras should stay off the event form")
+	}
+	if omitEventMenuItem("Coordenador") || omitEventMenuItem("Arroz branco") {
+		t.Fatal("coordinator and food items should remain")
+	}
+}

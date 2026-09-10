@@ -57,6 +57,7 @@ type MenuModelSection struct {
 	Notes             string
 	Items             []MenuModelItem
 	ChoiceGroups      []MenuChoiceGroup
+	CustomItems       []string
 }
 
 type MenuModelItem struct {

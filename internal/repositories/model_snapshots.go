@@ -304,6 +304,30 @@ func (s *Store) EventMenuModelCustomItems(ctx context.Context, eventID int64) ([
 	return result, rows.Err()
 }
 
+func (s *Store) EventMenuModelCustomItemsBySection(ctx context.Context, eventID int64) (map[int64][]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT section.source_template_section_id, item.normalized_name FROM event_menu_snapshot_items item
+		JOIN event_menu_sections section ON section.id=item.event_menu_section_id
+		JOIN event_menu_templates snapshot ON snapshot.id=section.event_menu_template_id
+		WHERE snapshot.event_id=? AND LOWER(section.name) NOT IN ('mesa de café','mesa do café') AND item.custom_item=1 AND item.selected=1 ORDER BY item.sort_order,item.id`, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := map[int64][]string{}
+	for rows.Next() {
+		var sectionID sql.NullInt64
+		var name string
+		if err := rows.Scan(&sectionID, &name); err != nil {
+			return nil, err
+		}
+		if !sectionID.Valid || strings.TrimSpace(name) == "" {
+			continue
+		}
+		result[sectionID.Int64] = append(result[sectionID.Int64], name)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) EventMenuModelStatus(ctx context.Context, eventID int64) (snapshotVersion, currentVersion int, modelName string, err error) {
 	err = s.db.QueryRowContext(ctx, `SELECT snapshot.source_version,model.current_version,model.name FROM event_menu_templates snapshot JOIN menu_templates model ON model.id=snapshot.source_menu_template_id WHERE snapshot.event_id=?`, eventID).Scan(&snapshotVersion, &currentVersion, &modelName)
 	if err == sql.ErrNoRows {

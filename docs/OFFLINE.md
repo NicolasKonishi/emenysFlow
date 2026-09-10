@@ -1,6 +1,6 @@
 # Operação offline
 
-O emenysFlow tem duas áreas. Você escolhe na tela inicial, e o aparelho também troca sozinho se a conexão com o serviço cair.
+O emenysFlow escolhe o modo sozinho. Com conexão, abre o sistema completo. Sem serviço, fica no modo offline.
 
 O **modo online** é o sistema completo. O **modo offline** usa só as checklists e o organizador de layout dos eventos salvos neste aparelho.
 
@@ -8,12 +8,13 @@ Nenhuma senha é persistida no navegador.
 
 ## Fluxo
 
-1. Depois do login, a tela inicial pergunta se você quer o modo online ou o modo offline.
-2. O aparelho consulta `/api/health` de tempos em tempos.
-3. Se o serviço não responder, o modo offline abre sozinho com as limitações de sempre.
-4. Quando a conexão volta, aparece o convite para abrir o sistema completo. Dá para continuar offline se preferir.
-5. Sincronizar alterações da checklist/layout **é opcional**.
-6. Enquanto houver conexão, o aparelho baixa os eventos para o modo offline funcionar sem internet.
+1. Depois do login, o aparelho consulta `/api/health`.
+2. Se o serviço responder, o sistema online abre.
+3. Se o serviço não responder, o modo offline abre sozinho, limitado a checklists e layout.
+4. Um watcher continua consultando a conexão.
+5. Nas configurações (e no hub offline) dá para ligar **Ao reconectar, abrir o sistema online**. Ligado é o padrão: quando a conexão volta, o sistema completo abre. Desligado, o aparelho permanece offline.
+6. Sincronizar alterações da checklist/layout **é opcional**.
+7. Enquanto houver conexão, o aparelho baixa os eventos para o modo offline funcionar sem internet.
 
 Cada operação possui um identificador único; repetições não são aplicadas duas vezes no servidor. Quantidades e rascunhos utilizam a versão conhecida no momento da alteração. Se houver uma versão mais nova no servidor, o painel de conflitos mostra as duas cópias e permite manter o servidor, manter a edição local ou mesclar campos compatíveis.
 

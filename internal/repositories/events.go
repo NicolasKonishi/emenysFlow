@@ -96,6 +96,36 @@ func defaultEventName(id int64) string {
 	return fmt.Sprintf("evento-%d", id)
 }
 
+func eventNameFromVenue(venue string, id int64) string {
+	if name := strings.TrimSpace(venue); name != "" {
+		return name
+	}
+	return defaultEventName(id)
+}
+
+func (s *Store) ListKnownVenues(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT venue FROM (
+			SELECT DISTINCT venue FROM events WHERE active=1 AND TRIM(venue) <> ''
+			UNION
+			SELECT DISTINCT venue FROM standalone_floor_layouts WHERE active=1 AND TRIM(venue) <> ''
+		) ORDER BY venue COLLATE NOCASE`)
+	if err != nil {
+		return nil, fmt.Errorf("list venues: %w", err)
+	}
+	defer rows.Close()
+	var venues []string
+	for rows.Next() {
+		var venue string
+		if err := rows.Scan(&venue); err != nil {
+			return nil, err
+		}
+		if venue = strings.TrimSpace(venue); venue != "" {
+			venues = append(venues, venue)
+		}
+	}
+	return venues, rows.Err()
+}
+
 func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64) error {
 	if event.EndsAt.Before(event.StartsAt) || event.EndsAt.Equal(event.StartsAt) {
 		return fmt.Errorf("end date must be after start date")
@@ -136,14 +166,14 @@ func (s *Store) SaveEvent(ctx context.Context, event *models.Event, userID int64
 			return err
 		}
 		if nameWasEmpty {
-			event.Name = defaultEventName(event.ID)
+			event.Name = eventNameFromVenue(event.Venue, event.ID)
 			_, err = s.db.ExecContext(ctx, `UPDATE events SET name=? WHERE id=?`, event.Name, event.ID)
 		}
 		return err
 	}
 
 	if nameWasEmpty {
-		event.Name = defaultEventName(event.ID)
+		event.Name = eventNameFromVenue(event.Venue, event.ID)
 	}
 
 	return withTx(ctx, s.db, func(tx *sql.Tx) error {
@@ -196,7 +226,7 @@ func (s *Store) DuplicateEvent(ctx context.Context, eventID, userID int64) (int6
 		return 0, err
 	}
 	event.ID = 0
-	event.Name += " — cópia"
+	event.Name = strings.TrimSpace(event.Venue)
 	event.Status = "planning"
 	event.StartsAt = event.StartsAt.AddDate(0, 0, 7)
 	event.EndsAt = event.EndsAt.AddDate(0, 0, 7)

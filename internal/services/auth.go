@@ -93,8 +93,8 @@ func (s *AuthService) EnsureDemoAdmin(ctx context.Context) error {
 	return s.store.EnsureDemoAdmin(ctx, hash)
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (models.User, string, time.Time, error) {
-	user, err := s.store.UserByEmail(ctx, strings.TrimSpace(email))
+func (s *AuthService) Login(ctx context.Context, userID int64, password string) (models.User, string, time.Time, error) {
+	user, err := s.store.UserByID(ctx, userID)
 	if err != nil || !user.Active || !VerifyPassword(user.Password, password) {
 		return models.User{}, "", time.Time{}, fmt.Errorf("invalid credentials")
 	}

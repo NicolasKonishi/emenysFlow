@@ -55,6 +55,21 @@ func TestStandaloneFloorLayoutCRUD(t *testing.T) {
 		t.Fatalf("list after save got %#v", listed)
 	}
 
+	venues, err := store.ListKnownVenues(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, venue := range venues {
+		if venue == "Espaço demonstração" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("known venues missing layout venue, got %#v", venues)
+	}
+
 	layout.Venue = "Salão atualizado"
 	if err := store.SaveStandaloneFloorLayout(ctx, &layout, 0); err != nil {
 		t.Fatal(err)

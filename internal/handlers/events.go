@@ -64,8 +64,11 @@ func (a *App) eventForm(writer http.ResponseWriter, request *http.Request) {
 	if data.Event.ID > 0 && modelID > 0 {
 		configurations, _ := a.store.EventMenuModelItemConfigurations(request.Context(), data.Event.ID)
 		overlayMenuModelConfigurations(data.ModelSections, configurations)
+		customBySection, _ := a.store.EventMenuModelCustomItemsBySection(request.Context(), data.Event.ID)
+		overlaySectionCustomItems(data.ModelSections, customBySection)
 	}
 	data.MenuCustomized = data.IsEdit
+	a.attachKnownVenues(request, &data)
 	a.render(writer, request, "event_form", data)
 }
 
@@ -77,40 +80,74 @@ func (a *App) parseEventForm(request *http.Request, id int64) (models.Event, err
 	if err != nil {
 		return models.Event{}, fmt.Errorf("Informe uma quantidade de convidados válida.")
 	}
-	starts, err := time.ParseInLocation("2006-01-02T15:04", request.FormValue("starts_at"), a.location)
+	starts, err := parseEventStart(request, a.location)
 	if err != nil {
-		return models.Event{}, fmt.Errorf("Informe a data e o horário de início.")
+		return models.Event{}, err
 	}
-	ends, err := time.ParseInLocation("2006-01-02T15:04", request.FormValue("ends_at"), a.location)
-	if err != nil || !ends.After(starts) {
-		return models.Event{}, fmt.Errorf("O término precisa ser posterior ao início.")
+	ends := starts.Add(8 * time.Hour)
+	if raw := strings.TrimSpace(request.FormValue("ends_at")); raw != "" {
+		parsed, parseErr := time.ParseInLocation("2006-01-02T15:04", raw, a.location)
+		if parseErr != nil || !parsed.After(starts) {
+			return models.Event{}, fmt.Errorf("O término precisa ser posterior ao início.")
+		}
+		ends = parsed
 	}
 	hasCake := boolForm(request.FormValue("has_cake"))
 	cakeNotes := ""
 	if hasCake {
 		cakeNotes = strings.TrimSpace(request.FormValue("cake_notes"))
 	}
+	clientName := strings.TrimSpace(request.FormValue("client_name"))
+	venue := strings.TrimSpace(request.FormValue("venue"))
+	name := strings.TrimSpace(request.FormValue("name"))
+	if name == "" {
+		name = venue
+	}
+	if name == "" {
+		name = clientName
+	}
+	if name == "" {
+		name = "Evento"
+	}
 	event := models.Event{
-		ID: id, TemplateID: parseOptionalInt(request.FormValue("template_id")), ClientName: strings.TrimSpace(request.FormValue("client_name")), Name: strings.TrimSpace(request.FormValue("name")),
-		Venue: strings.TrimSpace(request.FormValue("venue")), StartsAt: starts, EndsAt: ends, GuestCount: guestCount,
+		ID: id, TemplateID: parseOptionalInt(request.FormValue("template_id")), ClientName: clientName, Name: name,
+		Venue: venue, StartsAt: starts, EndsAt: ends, GuestCount: guestCount,
 		HasDecoration: boolForm(request.FormValue("has_decoration")), HasWelcomeDrinks: boolForm(request.FormValue("has_welcome_drinks")), HasCoffeeTable: boolForm(request.FormValue("has_coffee_table")), HasCake: hasCake,
 		StartersNotes: strings.TrimSpace(request.FormValue("starters_notes")), MainCoursesNotes: strings.TrimSpace(request.FormValue("main_courses_notes")),
 		SidesNotes: strings.TrimSpace(request.FormValue("sides_notes")), BeveragesNotes: strings.TrimSpace(request.FormValue("beverages_notes")),
 		CoffeeTableNotes: strings.TrimSpace(request.FormValue("coffee_table_notes")), CakeNotes: cakeNotes,
 		SweetsNotes: strings.TrimSpace(request.FormValue("sweets_notes")), DessertsNotes: strings.TrimSpace(request.FormValue("desserts_notes")),
 		Notes: checklistObservations(request.Form), SafetyMarginPercent: parseFloat(request.FormValue("safety_margin_percent")),
-		WaiterOverride: parseOptionalInt(request.FormValue("waiter_override")), CoordinatorOverride: parseOptionalInt(request.FormValue("coordinator_override")),
-		LeaderOverride: parseOptionalInt(request.FormValue("leader_override")), CoLeaderOverride: parseOptionalInt(request.FormValue("co_leader_override")),
 		AdditionalGuestMarginOverride: parseOptionalFloat(request.FormValue("additional_guest_margin_override")), UsesGlassware: boolForm(request.FormValue("uses_glassware")),
 		KitchenCookID: parseOptionalInt(request.FormValue("kitchen_cook_id")),
-	}
-	if event.ClientName == "" || event.Venue == "" {
-		return event, fmt.Errorf("Cliente e local são obrigatórios.")
 	}
 	if event.SafetyMarginPercent < 0 || event.SafetyMarginPercent > 100 {
 		return event, fmt.Errorf("A margem deve estar entre 0%% e 100%%.")
 	}
 	return event, nil
+}
+
+func parseEventStart(request *http.Request, location *time.Location) (time.Time, error) {
+	if combined := strings.TrimSpace(request.FormValue("starts_at")); combined != "" {
+		starts, err := time.ParseInLocation("2006-01-02T15:04", combined, location)
+		if err == nil {
+			return starts, nil
+		}
+	}
+	date := strings.TrimSpace(request.FormValue("event_date"))
+	clock := strings.TrimSpace(request.FormValue("starts_time"))
+	if date == "" || clock == "" {
+		return time.Time{}, fmt.Errorf("Informe o dia e o horário de início.")
+	}
+	combined := date + " " + clock
+	starts, err := time.ParseInLocation("2006-01-02 15:04", combined, location)
+	if err != nil {
+		starts, err = time.ParseInLocation("2006-01-02 15:04:05", combined, location)
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Informe o dia e o horário de início.")
+	}
+	return starts, nil
 }
 
 func checklistObservations(form url.Values) string {
@@ -429,8 +466,11 @@ func parseMenuModelSectionCustomItems(request *http.Request) map[int64][]string 
 			continue
 		}
 		sectionID, err := strconv.ParseInt(strings.TrimPrefix(key, "model_custom_items_section_"), 10, 64)
-		if err == nil && sectionID > 0 {
-			result[sectionID] = formLines(values[0])
+		if err != nil || sectionID <= 0 {
+			continue
+		}
+		for _, value := range values {
+			result[sectionID] = append(result[sectionID], formLines(value)...)
 		}
 	}
 	return result
@@ -488,6 +528,14 @@ func overlayMenuModelConfigurations(sections []models.MenuModelSection, configur
 	}
 }
 
+func overlaySectionCustomItems(sections []models.MenuModelSection, customItems map[int64][]string) {
+	for sectionIndex := range sections {
+		if items, exists := customItems[sections[sectionIndex].ID]; exists {
+			sections[sectionIndex].CustomItems = items
+		}
+	}
+}
+
 func parseMenuModelConfigurations(request *http.Request) map[int64]models.EventMenuItemConfiguration {
 	result := map[int64]models.EventMenuItemConfiguration{}
 	for key, values := range request.Form {
@@ -535,6 +583,9 @@ func (a *App) populateEventModelData(request *http.Request, data *PageData, mode
 		data.ModelSections = withoutCoffeeTableSection(data.ModelSections)
 		markMenuModelSelections(data.ModelSections, itemIDs)
 		overlayMenuModelConfigurations(data.ModelSections, parseMenuModelConfigurations(request))
+		if request.Method == http.MethodPost {
+			overlaySectionCustomItems(data.ModelSections, parseMenuModelSectionCustomItems(request))
+		}
 	}
 }
 
@@ -611,42 +662,26 @@ func applyMenuNotes(event *models.Event, selection []models.EventMenuItem) {
 }
 
 func (a *App) eventShow(writer http.ResponseWriter, request *http.Request) {
-	id, err := pathID(request)
-	if err != nil {
-		http.NotFound(writer, request)
-		return
-	}
-	data := a.baseData(request, "Checklist do evento", "events")
-	event, err := a.store.GetEvent(request.Context(), id)
-	if err != nil {
-		http.NotFound(writer, request)
-		return
-	}
-	data.Event = event
-	checklist, err := a.store.GetChecklistByEvent(request.Context(), id)
-	if err == sql.ErrNoRows {
-		checklist, err = a.checklist.GenerateTracked(request.Context(), id, "initial_generation", currentUser(request).ID)
-	}
-	if err != nil {
-		data.Error = databaseErrorMessage(err)
-	} else {
-		data.Checklist = checklist
-		data.Groups = groupChecklist(checklist.Items)
-		data.Recalculation, _ = a.store.LatestEventRecalculation(request.Context(), id)
-	}
-	a.render(writer, request, "event_show", data)
+	a.renderEventChecklist(writer, request)
 }
 
 func groupChecklist(items []models.ChecklistItem) []models.ChecklistGroup {
 	definitions := []models.ChecklistGroup{
+		{Key: "food", Category: "Comida", Completed: true},
+		{Key: "disposable", Category: "Descartáveis", Completed: true},
 		{Key: "material", Category: "Material", Completed: true},
 		{Key: "decoration", Category: "Decoração", Completed: true},
-		{Key: "team", Category: "Equipe", Completed: true},
 	}
-	groupIndexes := map[string]int{"material": 0, "decoration": 1, "team": 2}
+	groupIndexes := map[string]int{"food": 0, "disposable": 1, "material": 2, "decoration": 3}
 	for _, item := range items {
+		if checklistIsStaffPerson(item) {
+			continue
+		}
 		key := checklistOperationalGroup(item)
-		index := groupIndexes[key]
+		index, ok := groupIndexes[key]
+		if !ok {
+			index = groupIndexes["material"]
+		}
 		definitions[index].Items = append(definitions[index].Items, item)
 		if !checklistStatusCompleted(item.Status) {
 			definitions[index].Completed = false
@@ -662,13 +697,33 @@ func groupChecklist(items []models.ChecklistItem) []models.ChecklistGroup {
 }
 
 func checklistOperationalGroup(item models.ChecklistItem) string {
-	origin := strings.ToLower(item.CalculationOrigin)
-	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
-	if category == "decoração" || strings.HasPrefix(item.SourceKey, "decoration:") || strings.HasPrefix(item.SourceKey, "decoration-rental:") || strings.Contains(origin, "decoração") {
+	if checklistIsStaffPerson(item) {
+		return ""
+	}
+	if checklistIsDecoration(item) {
 		return "decoration"
 	}
-	if category == "equipe" || category == "itens dos garçons" {
-		return "team"
+	if checklistIsFood(item) {
+		return "food"
+	}
+	if checklistIsDisposable(item) {
+		return "disposable"
+	}
+	return "material"
+}
+
+func checklistIsStaffPerson(item models.ChecklistItem) bool {
+	kind := strings.ToLower(strings.TrimSpace(item.ItemKind))
+	if kind == "outsourced" {
+		return true
+	}
+	unit := strings.ToLower(strings.TrimSpace(item.Unit))
+	if unit == "profissional" {
+		return true
+	}
+	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	if category == "equipe" {
+		return true
 	}
 	staffNames := map[string]bool{
 		"garçom": true, "garçons": true, "coordenador": true, "coordenadores": true,
@@ -677,10 +732,39 @@ func checklistOperationalGroup(item models.ChecklistItem) string {
 		"copeira": true, "copeiras": true, "metriê": true, "maître": true,
 		"assessora": true, "assistente": true,
 	}
-	if staffNames[strings.ToLower(strings.TrimSpace(item.Name))] {
-		return "team"
+	return staffNames[strings.ToLower(strings.TrimSpace(item.Name))]
+}
+
+func checklistIsDecoration(item models.ChecklistItem) bool {
+	origin := strings.ToLower(item.CalculationOrigin)
+	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	return category == "decoração" ||
+		strings.HasPrefix(item.SourceKey, "decoration:") ||
+		strings.HasPrefix(item.SourceKey, "decoration-rental:") ||
+		strings.Contains(origin, "decoração")
+}
+
+func checklistIsFood(item models.ChecklistItem) bool {
+	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	origin := strings.ToLower(item.CalculationOrigin)
+	key := strings.ToLower(item.SourceKey)
+	kind := strings.ToLower(strings.TrimSpace(item.ItemKind))
+	switch category {
+	case "comidas", "bebidas", "bolo e doces", "sobremesas", "ingredientes de receitas":
+		return kind != "reusable" && kind != "rented"
+	case "mesa de café":
+		return kind == "consumable"
 	}
-	return "material"
+	if strings.HasPrefix(key, "menu-recipe:") || strings.HasPrefix(key, "menu-result:") {
+		return kind != "reusable" && kind != "rented"
+	}
+	return strings.Contains(origin, "receita") || strings.Contains(origin, "ingrediente")
+}
+
+func checklistIsDisposable(item models.ChecklistItem) bool {
+	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	name := strings.ToLower(strings.TrimSpace(item.Name))
+	return strings.Contains(category, "descart") || strings.Contains(name, "descart")
 }
 
 func checklistStatusCompleted(status string) bool {
@@ -834,7 +918,15 @@ func (a *App) checklistStatus(writer http.ResponseWriter, request *http.Request)
 	user := currentUser(request)
 	eventID := request.FormValue("event_id")
 	if err = a.store.UpdateChecklistItemStatus(request.Context(), id, request.FormValue("status"), user.ID); err != nil {
+		if wantsJSON(request) {
+			writeJSON(writer, statusForOperationError(err), map[string]any{"ok": false, "error": errorText(err)})
+			return
+		}
 		a.redirect(writer, request, "/events/"+eventID+"?type=danger&message="+url.QueryEscape(databaseErrorMessage(err)), http.StatusSeeOther)
+		return
+	}
+	if wantsJSON(request) {
+		writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "status": request.FormValue("status")})
 		return
 	}
 	a.redirect(writer, request, "/events/"+eventID+"?message="+url.QueryEscape("Status atualizado."), http.StatusSeeOther)
@@ -856,6 +948,9 @@ func (a *App) checklistGroupStatus(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	groupKey := request.PathValue("group")
+	if groupKey == "equipment" {
+		groupKey = "material"
+	}
 	var itemIDs []int64
 	for _, group := range groupChecklist(checklist.Items) {
 		if group.Key != groupKey {

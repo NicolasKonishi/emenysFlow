@@ -24,42 +24,70 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.User, error) {
 		item.AccessRole = item.Role
 		result = append(result, item)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	pointers := make([]*models.User, len(result))
+	for i := range result {
+		pointers[i] = &result[i]
+	}
+	if err := s.attachUserRoles(ctx, pointers...); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 func (s *Store) GetUser(ctx context.Context, id int64) (models.User, error) {
 	var item models.User
 	var active int
 	err := s.db.QueryRowContext(ctx, "SELECT id,name,email,access_role,row_version,active FROM users WHERE id=?", id).Scan(&item.ID, &item.Name, &item.Email, &item.Role, &item.RowVersion, &active)
+	if err != nil {
+		return item, err
+	}
 	item.Active = active == 1
 	item.AccessRole = item.Role
+	err = s.attachUserRoles(ctx, &item)
 	return item, err
 }
 func (s *Store) SaveUser(ctx context.Context, user *models.User, passwordHash string) error {
 	now := nowString()
-	if user.Role != "admin" && user.Role != "organizer" && user.Role != "operational" {
-		return fmt.Errorf("invalid role")
+	if len(user.Roles) == 0 {
+		return fmt.Errorf("selecione ao menos uma função")
 	}
+	for _, slug := range user.Roles {
+		if !models.IsKnownRole(slug) {
+			return fmt.Errorf("função inválida")
+		}
+	}
+	user.Role = models.PrimaryRole(user.Roles)
+	accessRole := models.LegacyAccessRole(user.Roles)
 	legacyRole := "employee"
-	if user.Role == "admin" {
+	if user.HasRole(models.RoleAdmin) {
 		legacyRole = "admin"
 	}
 	if user.ID == 0 {
 		if passwordHash == "" {
 			return fmt.Errorf("password required")
 		}
-		result, err := s.db.ExecContext(ctx, `INSERT INTO users(name,email,password_hash,role,access_role,active,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)`, user.Name, user.Email, passwordHash, legacyRole, user.Role, now, now)
+		result, err := s.db.ExecContext(ctx, `INSERT INTO users(name,email,password_hash,role,access_role,active,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?)`, user.Name, user.Email, passwordHash, legacyRole, accessRole, now, now)
 		if err != nil {
 			return err
 		}
 		user.ID, err = result.LastInsertId()
-		return err
+		if err != nil {
+			return err
+		}
+		return s.replaceUserRoles(ctx, user.ID, user.Roles)
 	}
 	if passwordHash != "" {
-		_, err := s.db.ExecContext(ctx, "UPDATE users SET name=?,email=?,password_hash=?,role=?,access_role=?,row_version=row_version+1,updated_at=? WHERE id=?", user.Name, user.Email, passwordHash, legacyRole, user.Role, now, user.ID)
+		if _, err := s.db.ExecContext(ctx, "UPDATE users SET name=?,email=?,password_hash=?,role=?,access_role=?,row_version=row_version+1,updated_at=? WHERE id=?", user.Name, user.Email, passwordHash, legacyRole, accessRole, now, user.ID); err != nil {
+			return err
+		}
+		return s.replaceUserRoles(ctx, user.ID, user.Roles)
+	}
+	if _, err := s.db.ExecContext(ctx, "UPDATE users SET name=?,email=?,role=?,access_role=?,row_version=row_version+1,updated_at=? WHERE id=?", user.Name, user.Email, legacyRole, accessRole, now, user.ID); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, "UPDATE users SET name=?,email=?,role=?,access_role=?,row_version=row_version+1,updated_at=? WHERE id=?", user.Name, user.Email, legacyRole, user.Role, now, user.ID)
-	return err
+	return s.replaceUserRoles(ctx, user.ID, user.Roles)
 }
 func (s *Store) ToggleUser(ctx context.Context, id, currentUserID int64) error {
 	if id == currentUserID {

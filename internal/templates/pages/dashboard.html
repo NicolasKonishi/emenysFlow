@@ -4,21 +4,20 @@
     <div>
       <span class="eyebrow">Sistema completo</span>
       <h1>Olá, {{.User.Name}}.</h1>
-      <p>Você está no sistema completo. Abra o modo offline para checklists e layout, ou deixe o aparelho trocar sozinho se a conexão cair.</p>
+      <p>Você está no sistema completo. Se a conexão cair, o modo offline abre sozinho.</p>
     </div>
     <div class="page-header-actions">
-      <form action="/workspace" method="post"><input type="hidden" name="workspace" value="offline"><button class="button ghost" type="submit">Abrir modo offline</button></form>
-      <a class="button primary" href="/events/new">{{icon "plus"}}Novo evento</a>
+      {{if can .User "events.edit"}}<a class="button primary" href="/events/new">{{icon "plus"}}Novo evento</a>{{end}}
     </div>
   </header>
   {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}
   {{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
 
   <section class="metric-grid" aria-label="Indicadores principais">
-    <article class="metric-card critical"><span class="metric-icon">{{icon "warning"}}</span><div><strong>{{.Dashboard.EventsWithShortages}}</strong><span>eventos com faltas</span></div><a href="/events">Ver eventos</a></article>
+    {{if can .User "events.view"}}<article class="metric-card critical"><span class="metric-icon">{{icon "warning"}}</span><div><strong>{{.Dashboard.EventsWithShortages}}</strong><span>eventos com faltas</span></div><a href="/events">Ver eventos</a></article>
     <article class="metric-card"><span class="metric-icon">{{icon "check"}}</span><div><strong>{{.Dashboard.AwaitingSeparation}}</strong><span>aguardando separação</span></div><a href="/events">Abrir fila</a></article>
-    <article class="metric-card warm"><span class="metric-icon">{{icon "return"}}</span><div><strong>{{.Dashboard.AwaitingReturn}}</strong><span>aguardando retorno</span></div><a href="/events">Conferir</a></article>
-    <article class="metric-card"><span class="metric-icon">{{icon "inventory"}}</span><div><strong>{{.Dashboard.BelowMinimumStock}}</strong><span>abaixo do mínimo</span></div><a href="/inventory">Ver estoque</a></article>
+    <article class="metric-card warm"><span class="metric-icon">{{icon "return"}}</span><div><strong>{{.Dashboard.AwaitingReturn}}</strong><span>aguardando retorno</span></div><a href="/events">Conferir</a></article>{{end}}
+    {{if can .User "inventory.view"}}<article class="metric-card"><span class="metric-icon">{{icon "inventory"}}</span><div><strong>{{.Dashboard.BelowMinimumStock}}</strong><span>abaixo do mínimo</span></div><a href="/inventory">Ver estoque</a></article>{{end}}
   </section>
 
   <div class="dashboard-grid">
@@ -37,7 +36,7 @@
       {{else}}<div class="empty-state"><strong>Nenhum evento agendado</strong><p>Crie o primeiro evento para gerar uma checklist.</p></div>{{end}}
     </section>
 
-    <aside class="panel attention-panel">
+    {{if can .User "inventory.view"}}<aside class="panel attention-panel">
       <div class="panel-heading"><div><span class="eyebrow">Estoque</span><h2>Pontos de atenção</h2></div></div>
       <ul class="attention-list">
         <li><span class="attention-dot danger"></span><div><strong>{{.Dashboard.DamagedItems}} itens danificados</strong><small>Indisponíveis para novas reservas</small></div><a href="/inventory">{{icon "arrow"}}</a></li>
@@ -46,7 +45,11 @@
         <li><span class="attention-dot info"></span><div><strong>{{.Dashboard.BelowMinimumStock}} estoques baixos</strong><small>Planeje compras e reposições</small></div><a href="/inventory">{{icon "arrow"}}</a></li>
         <a class="button secondary full" href="/inventory">Abrir controle de estoque</a>
       </ul>
-    </aside>
+    </aside>{{else if can .User "layouts"}}<aside class="panel attention-panel">
+      <div class="panel-heading"><div><span class="eyebrow">Layout</span><h2>Plantas do salão</h2></div></div>
+      <p>Monte o layout do zero ou a partir de um evento já cadastrado.</p>
+      <a class="button secondary full" href="/layouts">Abrir layouts</a>
+    </aside>{{end}}
   </div>
 </div>
 {{end}}

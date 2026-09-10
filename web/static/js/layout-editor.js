@@ -24,6 +24,7 @@ const LAYOUT_THEME = {
 const DEFAULT_LAYOUT = { version: 2, width: 1400, height: 900, waiters: [], elements: [] };
 const MOBILE_LAYOUT_QUERY = window.matchMedia("(max-width: 820px)");
 const GRID_SIZE = 40;
+const LAYOUT_HISTORY_LIMIT = 100;
 const TABLE_SIZES = {
   small: {
     table_round: { width: GRID_SIZE, height: GRID_SIZE },
@@ -44,6 +45,10 @@ const TABLE_RECT_HEIGHT = TABLE_SIZES.medium.table_rect.height;
 const TABLE_ROW_GAP = GRID_SIZE;
 const WORLD_MIN = -6000;
 const WORLD_MAX = 12000;
+const SEATS_PER_TABLE = 8;
+const MIN_VIEW_SCALE = 32 / TABLE_ROUND_SIZE;
+const MAX_VIEW_SCALE = 120 / TABLE_ROUND_SIZE;
+const TARGET_TABLE_PX = 58;
 
 function layoutColorForWaiter(name, registry, options = {}) {
   const key = (name || "").trim().toLowerCase();
@@ -56,8 +61,8 @@ function layoutColorForWaiter(name, registry, options = {}) {
 
 function layoutAccentForElement(item, registry) {
   if (!item || item.type === "marker") return "rgba(255,255,255,0.38)";
-  if (item.color) return item.color;
   if (item.waiter) return layoutColorForWaiter(item.waiter, registry);
+  if (item.color) return item.color;
   return LAYOUT_THEME.glassStroke;
 }
 
@@ -736,8 +741,6 @@ function initializeLayoutEditor(root = document) {
   const floatSheet = editor.querySelector("[data-layout-sheet]");
   const floatSheetBody = editor.querySelector("[data-layout-sheet-body]");
   const floatSheetTitle = editor.querySelector("[data-layout-sheet-title]");
-  const rowPanel = editor.querySelector("[data-layout-row-panel]");
-  const rowForm = editor.querySelector("[data-layout-row-form]");
   const floatTop = editor.querySelector("[data-layout-float-top]");
   const metaForm = editor.querySelector("[data-layout-meta-form]");
   const waiterCountInput = editor.querySelector("[data-layout-waiter-count]");
@@ -774,20 +777,28 @@ function initializeLayoutEditor(root = document) {
     else configuredWaiters = resizeWaiterRoster([], Number(waiterCountInput.value) || 0);
     editor.dataset.waiterCount = String(configuredWaiters.length);
   }
+  state.waiters = [...configuredWaiters];
   let includeCoLeader = false;
 
-  let selectedId = null;
+  let selectedIds = new Set();
+  let placementWaiter = "";
   let activeTool = "select";
   let dragState = null;
   let resizeState = null;
+  let marqueeState = null;
   let pendingRow = null;
   let rowPreview = null;
   let rowDragState = null;
   let fullscreenActive = false;
   let view = { x: 0, y: 0, scale: 1 };
   let panState = null;
+  let pinchState = null;
   let draftReady = false;
   let draftTimer = null;
+  let undoStack = [];
+  let redoStack = [];
+  let historyCurrent = JSON.stringify(state);
+  let applyingHistory = false;
   const waiterRegistry = new Map();
   function registerWaiterColors() {
     waiterRegistry.clear();
@@ -812,18 +823,33 @@ function initializeLayoutEditor(root = document) {
     };
   }
 
+  function guestCountValue() {
+    if (metaForm) return Math.max(0, Number(metaForm.querySelector('[name="guest_count"]')?.value) || 0);
+    return Math.max(0, Number(editor.dataset.guestCount) || 0);
+  }
+
+  function divisionTableCount() {
+    const drawn = tableCount(state.elements);
+    if (drawn > 0) return { tables: drawn, estimated: false };
+    const guests = guestCountValue();
+    if (guests <= 0) return { tables: 0, estimated: false };
+    return { tables: Math.max(1, Math.ceil(guests / SEATS_PER_TABLE)), estimated: true };
+  }
+
   function currentDivision() {
     const suggest = window.emenysSuggestFloorWaiterDivision;
     if (!suggest) return null;
     const staff = staffCounts();
-    return suggest({
-      tables: tableCount(state.elements),
+    const tables = divisionTableCount();
+    const plan = suggest({
+      tables: tables.tables,
       waiters: staff.waiters,
       coordinators: staff.coordinators,
       leaders: staff.leaders,
       coleaders: staff.coleaders,
       includeCoLeader,
     });
+    return { ...plan, estimated: tables.estimated, guestCount: guestCountValue() };
   }
 
   function servingNamesForDivision(plan) {
@@ -861,23 +887,92 @@ function initializeLayoutEditor(root = document) {
     });
   }
 
+  function viewportRect() {
+    return viewport?.getBoundingClientRect() || svg.getBoundingClientRect();
+  }
+
+  function clampScale(value) {
+    const scale = Number(value) || 1;
+    return Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, scale));
+  }
+
+  function comfortableScale() {
+    const target = isMobileLayout() ? TARGET_TABLE_PX : 72;
+    return clampScale(target / TABLE_ROUND_SIZE);
+  }
+
+  function clientToWorld(clientX, clientY) {
+    const rect = viewportRect();
+    return {
+      x: view.x + (clientX - rect.left) / view.scale,
+      y: view.y + (clientY - rect.top) / view.scale,
+    };
+  }
+
+  function setScaleAroundClient(clientX, clientY, nextScale) {
+    const world = clientToWorld(clientX, clientY);
+    view.scale = clampScale(nextScale);
+    const rect = viewportRect();
+    view.x = world.x - (clientX - rect.left) / view.scale;
+    view.y = world.y - (clientY - rect.top) / view.scale;
+    updateViewBox();
+  }
+
+  function visibleWorldSize() {
+    const rect = viewportRect();
+    return {
+      width: Math.max(1, rect.width) / view.scale,
+      height: Math.max(1, rect.height) / view.scale,
+    };
+  }
+
   function updateViewBox() {
     syncViewportSize();
-    const width = state.width / view.scale;
-    const height = state.height / view.scale;
-    svg.setAttribute("viewBox", `${view.x} ${view.y} ${width} ${height}`);
-    updateInfiniteBackground(width, height);
-    if (zoomLabel) zoomLabel.textContent = `${Math.round(view.scale * 100)}%`;
+    view.scale = clampScale(view.scale);
+    const size = visibleWorldSize();
+    svg.setAttribute("viewBox", `${view.x} ${view.y} ${size.width} ${size.height}`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    updateInfiniteBackground(size.width, size.height);
+    if (zoomLabel) zoomLabel.textContent = `${Math.round((view.scale * TABLE_ROUND_SIZE / TARGET_TABLE_PX) * 100)}%`;
   }
 
   function clampView() {
     // Pan livre — o grid infinito acompanha a área visível.
   }
 
+  function fitViewToContent() {
+    const rect = viewportRect();
+    if (!rect.width || !rect.height) {
+      view.scale = comfortableScale();
+      view.x = 0;
+      view.y = 0;
+      updateViewBox();
+      return;
+    }
+    if (!state.elements.length) {
+      view.scale = comfortableScale();
+      view.x = -GRID_SIZE;
+      view.y = -GRID_SIZE * 0.5;
+      updateViewBox();
+      return;
+    }
+    const bounds = contentBounds(isMobileLayout() ? 48 : 80);
+    const scale = clampScale(Math.min(rect.width / Math.max(bounds.width, 1), rect.height / Math.max(bounds.height, 1)));
+    view.scale = scale;
+    const size = {
+      width: rect.width / view.scale,
+      height: rect.height / view.scale,
+    };
+    view.x = bounds.x + bounds.width / 2 - size.width / 2;
+    view.y = bounds.y + bounds.height / 2 - size.height / 2;
+    updateViewBox();
+  }
+
   function updateSelectionOutline(element) {
     if (!element || !layers.selection) return;
     const pad = 8;
-    const outline = layers.selection.querySelector("[data-layout-selection-outline]");
+    const outline = layers.selection.querySelector(`[data-layout-selection-id="${element.id}"]`)
+      || layers.selection.querySelector("[data-layout-selection-outline]");
     if (outline) {
       outline.setAttribute("x", String(element.x - pad));
       outline.setAttribute("y", String(element.y - pad));
@@ -921,10 +1016,7 @@ function initializeLayoutEditor(root = document) {
   }
 
   function fitInitialView() {
-    view.x = 0;
-    view.y = 0;
-    view.scale = 1;
-    updateViewBox();
+    fitViewToContent();
   }
 
   function resetView() {
@@ -1027,7 +1119,6 @@ function initializeLayoutEditor(root = document) {
     rowPreview = { startX: start.x, startY: start.y };
     setActiveTool("place_row");
     closeSheet();
-    closeRowPanel();
     showRowPreviewHint();
     render();
   }
@@ -1094,8 +1185,47 @@ function initializeLayoutEditor(root = document) {
     return [...state.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   }
 
+  function selectedElements() {
+    return state.elements.filter((item) => selectedIds.has(item.id));
+  }
+
   function selectedElement() {
-    return state.elements.find((item) => item.id === selectedId) || null;
+    const items = selectedElements();
+    return items[items.length - 1] || null;
+  }
+
+  function isTableElement(item) {
+    return item?.type === "table_round" || item?.type === "table_rect";
+  }
+
+  function isTablePlacementTool(tool = activeTool) {
+    return tool === "table_round" || tool === "table_rect";
+  }
+
+  function sharedValue(items, getter) {
+    if (!items.length) return { mixed: false, value: "" };
+    const values = items.map(getter);
+    const first = values[0];
+    return { mixed: values.some((value) => value !== first), value: first };
+  }
+
+  function normalizeRect(x1, y1, x2, y2) {
+    const x = Math.min(x1, x2);
+    const y = Math.min(y1, y2);
+    return { x, y, width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+  }
+
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  }
+
+  function appendDisabledOption(select, value, label) {
+    if (!select || [...select.options].some((option) => option.value === value)) return;
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    option.disabled = true;
+    select.insertBefore(option, select.firstChild);
   }
 
   function isWaiterNameGridEditing() {
@@ -1120,14 +1250,40 @@ function initializeLayoutEditor(root = document) {
     if (options.render !== false) render();
   }
 
-  function bindWaiterNameInput(input, index) {
+  function bindWaiterNameInput(input, index, previousName) {
     input.dataset.waiterIndex = String(index);
-    input.addEventListener("input", () => {
+    const commit = () => {
+      const next = input.value.trim() || previousName || `Garçom ${index + 1}`;
       const previous = configuredWaiters[index];
-      configuredWaiters[index] = input.value;
-      remapWaiterNameOnElements(state.elements, previous, input.value);
-      syncConfiguredWaiters({ rebuildGrid: false });
+      configuredWaiters[index] = next;
+      remapWaiterNameOnElements(state.elements, previous, next);
+      syncConfiguredWaiters({ rebuildGrid: true });
+    };
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        input.value = previousName;
+        input.blur();
+      }
     });
+  }
+
+  function startWaiterNameEdit(button, index) {
+    const previous = configuredWaiters[index] || `Garçom ${index + 1}`;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "layout-waiter-name-input";
+    input.value = "";
+    input.placeholder = "Nome do garçom";
+    input.setAttribute("aria-label", `Nome do garçom ${index + 1}`);
+    bindWaiterNameInput(input, index, previous);
+    button.replaceWith(input);
+    input.focus();
   }
 
   function fillWaiterNameGrid(grid) {
@@ -1136,29 +1292,41 @@ function initializeLayoutEditor(root = document) {
     grid.replaceChildren();
     const shadow = shadowWaiterName();
     configuredWaiters.forEach((name, index) => {
-      const label = document.createElement("label");
+      const card = document.createElement("div");
+      card.className = "layout-waiter-name-card";
       const title = document.createElement("span");
       title.className = "layout-waiter-name-title";
       const swatch = document.createElement("span");
       swatch.className = "layout-legend-swatch";
       swatch.style.background = layoutColorForWaiter(name, waiterRegistry, { shadow: name === shadow });
       title.append(swatch, document.createTextNode(name === shadow ? `Garçom ${index + 1} · sombra` : `Garçom ${index + 1}`));
-      const input = document.createElement("input");
-      input.type = "text";
-      input.value = name;
-      input.placeholder = name === shadow ? "Sombra dos noivos" : `Nome do garçom ${index + 1}`;
-      bindWaiterNameInput(input, index);
-      label.append(title, input);
-      grid.append(label);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "layout-waiter-name-value";
+      button.textContent = name;
+      button.setAttribute("aria-label", `Trocar nome do ${name}`);
+      button.addEventListener("click", () => startWaiterNameEdit(button, index));
+      card.append(title, button);
+      grid.append(card);
     });
   }
 
   function renderWaiterNameGrid() {
     editor.querySelectorAll("[data-layout-waiter-name-grid]").forEach((grid) => fillWaiterNameGrid(grid));
   }
-  function refreshWaiterSelect(select = waiterSelect) {
+  function refreshWaiterSelect(select) {
+    if (select) {
+      fillWaiterSelect(select);
+      return;
+    }
+    fillWaiterSelect(waiterSelect);
+    editor.querySelectorAll("[data-layout-place-waiter], [data-layout-prop='waiter']").forEach((node) => fillWaiterSelect(node));
+  }
+
+  function fillWaiterSelect(select) {
     if (!select) return;
-    const current = select.value;
+    const current = select.value === "__mixed__" ? "" : select.value;
+    const keepPlacement = select.hasAttribute("data-layout-place-waiter") ? placementWaiter : current;
     select.replaceChildren();
     const empty = document.createElement("option");
     empty.value = "";
@@ -1177,7 +1345,11 @@ function initializeLayoutEditor(root = document) {
       option.textContent = name;
       select.append(option);
     });
-    select.value = current;
+    if (select.hasAttribute("data-layout-place-waiter")) {
+      select.value = [...select.options].some((option) => option.value === placementWaiter) ? placementWaiter : "";
+    } else {
+      select.value = [...select.options].some((option) => option.value === keepPlacement) ? keepPlacement : "";
+    }
   }
 
   function syncWaiterCountInputs(count) {
@@ -1208,6 +1380,108 @@ function initializeLayoutEditor(root = document) {
     rebuildWaiterNamesFromCount(next);
   }
 
+  function knownVenues() {
+    try {
+      const parsed = JSON.parse(editor.dataset.knownVenues || "[]");
+      return Array.isArray(parsed) ? parsed.map((name) => String(name || "").trim()).filter(Boolean) : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function venueValue(root = metaForm) {
+    return (root?.querySelector('[name="venue"]')?.value || editor.dataset.venue || "").trim();
+  }
+
+  function syncLayoutNameFromVenue(root = metaForm) {
+    const venue = venueValue(root);
+    root?.querySelectorAll('[name="name"]').forEach((input) => {
+      input.value = venue;
+    });
+    if (metaForm && root !== metaForm) {
+      const originalVenue = metaForm.querySelector('[name="venue"]');
+      const originalName = metaForm.querySelector('[name="name"]');
+      if (originalVenue) originalVenue.value = venue;
+      if (originalName) originalName.value = venue;
+    }
+    if (venue) {
+      editor.dataset.exportTitle = venue;
+      editor.dataset.venue = venue;
+      const floatTitle = editor.querySelector("[data-layout-float-title]");
+      if (floatTitle) floatTitle.textContent = venue;
+    }
+    syncStandaloneHiddenFields();
+  }
+
+  function filterKnownVenues(query) {
+    const needle = (query || "").trim().toLowerCase();
+    const names = knownVenues();
+    if (!needle) return names.slice(0, 8);
+    return names.filter((name) => name.toLowerCase().includes(needle)).slice(0, 8);
+  }
+
+  function bindVenueSearch(root = metaForm) {
+    if (!root) return;
+    const input = root.querySelector("[data-layout-venue-search], [name='venue']");
+    const list = root.querySelector("[data-layout-venue-results]");
+    if (!input) return;
+    const renderMatches = () => {
+      if (!list) return;
+      const matches = filterKnownVenues(input.value);
+      list.replaceChildren();
+      if (!matches.length || matches.some((name) => name.toLowerCase() === input.value.trim().toLowerCase())) {
+        list.hidden = true;
+        return;
+      }
+      matches.forEach((name) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "layout-venue-option";
+        item.textContent = name;
+        item.addEventListener("mousedown", (event) => event.preventDefault());
+        item.addEventListener("click", () => {
+          input.value = name;
+          list.hidden = true;
+          syncLayoutNameFromVenue(root);
+          updateStats();
+        });
+        list.append(item);
+      });
+      list.hidden = false;
+    };
+    if (input.dataset.venueBound === "1") return;
+    input.dataset.venueBound = "1";
+    input.addEventListener("input", () => {
+      syncLayoutNameFromVenue(root);
+      updateStats();
+      renderMatches();
+    });
+    input.addEventListener("focus", renderMatches);
+    input.addEventListener("blur", () => window.setTimeout(() => {
+      if (list) list.hidden = true;
+    }, 120));
+  }
+
+  function requireVenueToContinue() {
+    if (mode !== "standalone") {
+      if (!(editor.dataset.venue || "").trim()) {
+        window.alert("Informe o local do evento antes de montar o layout.");
+        return false;
+      }
+      return true;
+    }
+    if (venueValue()) {
+      syncLayoutNameFromVenue();
+      return true;
+    }
+    const setupOpen = floatSheet && !floatSheet.hidden && floatSheet.dataset.open === "setup";
+    if (!setupOpen) openSetupSheet();
+    const input = floatSheet?.querySelector("[data-layout-venue-search], [name='venue']") || metaForm?.querySelector("[name='venue']");
+    input?.focus();
+    window.alert("Informe o local do evento. Se não estiver na lista, preencha o nome do espaço.");
+    return false;
+  }
+
   function syncStandaloneHiddenFields() {
     if (mode !== "standalone" || !saveForm) return;
     const set = (field, value) => {
@@ -1215,8 +1489,8 @@ function initializeLayoutEditor(root = document) {
       if (input) input.value = value;
     };
     if (metaForm) {
-      set("name", metaForm.querySelector('[name="name"]')?.value || "");
-      set("venue", metaForm.querySelector('[name="venue"]')?.value || "");
+      set("name", venueValue() || metaForm.querySelector('[name="name"]')?.value || "");
+      set("venue", venueValue());
       set("guest_count", metaForm.querySelector('[name="guest_count"]')?.value || "0");
       set("waiter_count", waiterCountInput?.value || metaForm.querySelector('[name="waiter_count"]')?.value || "0");
     }
@@ -1264,11 +1538,15 @@ function initializeLayoutEditor(root = document) {
     if (!plan) return;
     root.querySelectorAll("[data-layout-division-summary]").forEach((node) => {
       const parts = [
-        `${plan.tableCount} ${plan.tableCount === 1 ? "mesa" : "mesas"}`,
+        plan.estimated
+          ? `${plan.tableCount} ${plan.tableCount === 1 ? "mesa prevista" : "mesas previstas"}`
+          : `${plan.tableCount} ${plan.tableCount === 1 ? "mesa" : "mesas"}`,
+        plan.guestCount ? `${plan.guestCount} convidados` : null,
+        `${plan.waiterCount} ${plan.waiterCount === 1 ? "garçom" : "garçons"}`,
         plan.shadowWaiters ? "1 sombra dos noivos" : null,
         "coordenação e líder sem mesa",
       ].filter(Boolean);
-      if (plan.servingPeople > 0) {
+      if (plan.servingPeople > 0 && plan.tableCount > 0) {
         const per = formatTablesPerPerson(plan.tablesPerPerson);
         parts.push(`${per} ${per === "1" ? "mesa" : "mesas"} por pessoa na pista`);
       } else if (plan.tableCount > 0) {
@@ -1522,24 +1800,30 @@ function initializeLayoutEditor(root = document) {
     render();
   }
 
-  function renderSelection(element) {
+  function renderSelection(elements) {
     layers.selection.replaceChildren();
-    if (!element) return;
+    const items = Array.isArray(elements) ? elements : selectedElements();
+    if (!items.length) return;
     const pad = 8;
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("data-layout-selection-outline", "1");
-    rect.setAttribute("x", String(element.x - pad));
-    rect.setAttribute("y", String(element.y - pad));
-    rect.setAttribute("width", String(element.width + pad * 2));
-    rect.setAttribute("height", String(element.height + pad * 2));
-    rect.setAttribute("fill", "none");
-    rect.setAttribute("stroke", LAYOUT_THEME.selection);
-    rect.setAttribute("stroke-width", "2");
-    rect.setAttribute("stroke-dasharray", "6 4");
-    rect.setAttribute("rx", "10");
-    layers.selection.append(rect);
+    const showHandles = items.length === 1 && isResizableElement(items[0]) && activeTool === "select";
+    items.forEach((element) => {
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("data-layout-selection-outline", "1");
+      rect.setAttribute("data-layout-selection-id", element.id);
+      rect.setAttribute("x", String(element.x - pad));
+      rect.setAttribute("y", String(element.y - pad));
+      rect.setAttribute("width", String(element.width + pad * 2));
+      rect.setAttribute("height", String(element.height + pad * 2));
+      rect.setAttribute("fill", "none");
+      rect.setAttribute("stroke", LAYOUT_THEME.selection);
+      rect.setAttribute("stroke-width", "2");
+      rect.setAttribute("stroke-dasharray", "6 4");
+      rect.setAttribute("rx", "10");
+      layers.selection.append(rect);
+    });
 
-    if (isResizableElement(element) && activeTool === "select") {
+    if (showHandles) {
+      const element = items[0];
       RESIZE_HANDLES.forEach((handle) => {
         const [cx, cy] = resizeHandlePosition(element, handle.id, pad);
         const hit = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -1555,6 +1839,49 @@ function initializeLayoutEditor(root = document) {
         layers.selection.append(hit);
       });
     }
+  }
+
+  function renderMarquee() {
+    if (!layers.preview || !marqueeState) return;
+    layers.preview.replaceChildren();
+    const box = normalizeRect(marqueeState.startX, marqueeState.startY, marqueeState.currentX, marqueeState.currentY);
+    if (box.width < 2 && box.height < 2) return;
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", String(box.x));
+    rect.setAttribute("y", String(box.y));
+    rect.setAttribute("width", String(box.width));
+    rect.setAttribute("height", String(box.height));
+    rect.setAttribute("fill", LAYOUT_THEME.preview);
+    rect.setAttribute("stroke", LAYOUT_THEME.selection);
+    rect.setAttribute("stroke-width", "1.5");
+    rect.setAttribute("stroke-dasharray", "8 5");
+    rect.setAttribute("rx", "4");
+    layers.preview.append(rect);
+  }
+
+  function updateMarquee(event) {
+    if (!marqueeState) return;
+    const world = clientToWorld(event.clientX, event.clientY);
+    marqueeState.currentX = world.x;
+    marqueeState.currentY = world.y;
+    const box = normalizeRect(marqueeState.startX, marqueeState.startY, marqueeState.currentX, marqueeState.currentY);
+    selectedIds = new Set(marqueeState.baseline);
+    state.elements.forEach((item) => {
+      if (rectsOverlap(item, box)) selectedIds.add(item.id);
+    });
+    renderMarquee();
+    renderSelection();
+  }
+
+  function finishMarquee() {
+    if (!marqueeState) return;
+    const box = normalizeRect(marqueeState.startX, marqueeState.startY, marqueeState.currentX, marqueeState.currentY);
+    const moved = box.width >= 6 || box.height >= 6;
+    if (!moved && !marqueeState.keepOnClick) selectedIds.clear();
+    marqueeState = null;
+    if (layers.preview && activeTool !== "place_row") layers.preview.replaceChildren();
+    renderSelection();
+    syncPropsPanel();
   }
 
   function renderElement(item) {
@@ -1616,17 +1943,31 @@ function initializeLayoutEditor(root = document) {
     group.addEventListener("pointerdown", (event) => {
       if (activeTool !== "select") return;
       event.stopPropagation();
-      selectElement(item.id);
+      const already = selectedIds.has(item.id);
+      if (!already) {
+        selectedIds.clear();
+        selectedIds.add(item.id);
+      }
+      const selected = selectedElements();
+      const origins = {};
+      selected.forEach((element) => {
+        origins[element.id] = { x: element.x, y: element.y };
+      });
       dragState = {
         id: item.id,
+        ids: selected.map((element) => element.id),
         startX: event.clientX,
         startY: event.clientY,
         originX: item.x,
         originY: item.y,
-        pendingX: item.x,
-        pendingY: item.y,
+        origins,
+        pendingOffsetX: 0,
+        pendingOffsetY: 0,
         moved: false,
+        toggleOnClick: false,
       };
+      renderSelection();
+      syncPropsPanel();
       group.setPointerCapture(event.pointerId);
     });
 
@@ -1688,7 +2029,82 @@ function initializeLayoutEditor(root = document) {
     }
   }
 
+  function layoutHistorySnapshot() {
+    state.waiters = configuredWaiters.filter(Boolean);
+    return JSON.stringify(state);
+  }
+
+  function updateHistoryButtons() {
+    editor.querySelectorAll('[data-layout-history="undo"]').forEach((button) => {
+      button.disabled = undoStack.length === 0;
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+    });
+    editor.querySelectorAll('[data-layout-history="redo"]').forEach((button) => {
+      button.disabled = redoStack.length === 0;
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+    });
+  }
+
+  function captureLayoutHistory() {
+    const next = layoutHistorySnapshot();
+    if (applyingHistory) {
+      historyCurrent = next;
+      updateHistoryButtons();
+      return;
+    }
+    if (next === historyCurrent) return;
+    undoStack.push(historyCurrent);
+    if (undoStack.length > LAYOUT_HISTORY_LIMIT) undoStack.shift();
+    redoStack = [];
+    historyCurrent = next;
+    updateHistoryButtons();
+  }
+
+  function restoreLayoutHistory(snapshot) {
+    applyingHistory = true;
+    try {
+      state = parseLayoutState(snapshot);
+      configuredWaiters = [...state.waiters];
+      selectedIds.clear();
+      activeTool = "select";
+      dragState = null;
+      resizeState = null;
+      marqueeState = null;
+      pendingRow = null;
+      rowPreview = null;
+      rowDragState = null;
+      clearPlacementHint();
+      closeSheet();
+      syncWaiterCountInputs(configuredWaiters.length);
+      registerWaiterColors();
+      refreshWaiterSelect();
+      renderWaiterNameGrid();
+      historyCurrent = JSON.stringify(state);
+      render();
+    } finally {
+      applyingHistory = false;
+      updateHistoryButtons();
+    }
+  }
+
+  function undoLayout() {
+    if (!undoStack.length) return;
+    const snapshot = undoStack.pop();
+    redoStack.push(historyCurrent);
+    if (redoStack.length > LAYOUT_HISTORY_LIMIT) redoStack.shift();
+    restoreLayoutHistory(snapshot);
+  }
+
+  function redoLayout() {
+    if (!redoStack.length) return;
+    const snapshot = redoStack.pop();
+    undoStack.push(historyCurrent);
+    if (undoStack.length > LAYOUT_HISTORY_LIMIT) undoStack.shift();
+    restoreLayoutHistory(snapshot);
+  }
+
   function render() {
+    captureLayoutHistory();
     layers.tables.replaceChildren();
     layers.markers.replaceChildren();
     sortedElements().forEach((item) => {
@@ -1696,7 +2112,7 @@ function initializeLayoutEditor(root = document) {
       if (item.type === "marker") layers.markers.append(node);
       else layers.tables.append(node);
     });
-    renderSelection(selectedElement());
+    renderSelection();
     renderRowPreview();
     updateStats();
     updateLegend();
@@ -1712,6 +2128,29 @@ function initializeLayoutEditor(root = document) {
     });
   }
 
+  function syncPlacementWaiterUI() {
+    const show = isTablePlacementTool();
+    editor.querySelectorAll("[data-layout-place-waiter-wrap]").forEach((node) => {
+      node.hidden = !show;
+    });
+    const bar = editor.querySelector("[data-layout-place-bar]");
+    if (bar) bar.hidden = !show || !isMobileLayout();
+    editor.querySelectorAll("[data-layout-place-waiter]").forEach((select) => fillWaiterSelect(select));
+  }
+
+  function bindPlacementWaiter() {
+    editor.querySelectorAll("[data-layout-place-waiter]").forEach((select) => {
+      if (select.dataset.bound === "true") return;
+      select.dataset.bound = "true";
+      select.addEventListener("change", () => {
+        placementWaiter = select.value || "";
+        editor.querySelectorAll("[data-layout-place-waiter]").forEach((other) => {
+          if (other !== select) other.value = placementWaiter;
+        });
+      });
+    });
+  }
+
   function setActiveTool(tool) {
     activeTool = tool;
     if (tool !== "place_row") {
@@ -1720,18 +2159,20 @@ function initializeLayoutEditor(root = document) {
       rowDragState = null;
       clearPlacementHint();
     }
-    if (tool !== "select" && tool !== "place_row") closeRowPanel();
     syncToolButtons();
+    syncPlacementWaiterUI();
     renderRowPreview();
   }
 
   function selectElement(id) {
-    selectedId = id;
-    if (propsPanel) propsPanel.hidden = !id || isMobileLayout();
-    if (id && !isMobileLayout() && fullscreenActive) {
-      closeSheet();
+    if (id == null) {
+      selectedIds.clear();
+    } else {
+      selectedIds.clear();
+      selectedIds.add(id);
     }
-    renderSelection(selectedElement());
+    if (id && !isMobileLayout() && fullscreenActive) closeSheet();
+    renderSelection();
     syncPropsPanel();
   }
 
@@ -1741,16 +2182,26 @@ function initializeLayoutEditor(root = document) {
 
   function finishDrag() {
     if (!dragState) return;
-    const { id, moved, pendingX, pendingY } = dragState;
-    const element = state.elements.find((item) => item.id === id);
-    const group = findElementGroup(id);
-    if (group) group.removeAttribute("transform");
-    if (element && moved) {
-      element.x = pendingX;
-      element.y = pendingY;
+    const { id, ids, moved, pendingOffsetX, pendingOffsetY, origins, toggleOnClick } = dragState;
+    (ids || [id]).forEach((itemId) => {
+      const group = findElementGroup(itemId);
+      if (group) group.removeAttribute("transform");
+    });
+    if (moved) {
+      (ids || [id]).forEach((itemId) => {
+        const element = state.elements.find((item) => item.id === itemId);
+        const origin = origins?.[itemId];
+        if (!element || !origin) return;
+        element.x = origin.x + pendingOffsetX;
+        element.y = origin.y + pendingOffsetY;
+      });
       render();
-    } else if (element) {
-      renderSelection(element);
+    } else if (toggleOnClick) {
+      selectedIds.delete(id);
+      renderSelection();
+      syncPropsPanel();
+    } else {
+      renderSelection();
     }
     dragState = null;
   }
@@ -1767,25 +2218,31 @@ function initializeLayoutEditor(root = document) {
     if (!matrix) return;
     const element = state.elements.find((item) => item.id === dragState.id);
     if (!element) return;
-    const rawX = dragState.originX + dx / matrix.a;
-    const rawY = dragState.originY + dy / matrix.d;
-    const snapped = snapPosition(rawX, rawY, element.width, element.height);
-    dragState.pendingX = snapped.x;
-    dragState.pendingY = snapped.y;
-    const group = findElementGroup(element.id);
-    if (group) {
-      group.setAttribute("transform", `translate(${dragState.pendingX - dragState.originX} ${dragState.pendingY - dragState.originY})`);
-    }
-    renderSelection({ ...element, x: dragState.pendingX, y: dragState.pendingY });
+    const snapped = snapPosition(dragState.originX + dx / matrix.a, dragState.originY + dy / matrix.d, element.width, element.height);
+    const pendingOffsetX = snapped.x - dragState.originX;
+    const pendingOffsetY = snapped.y - dragState.originY;
+    dragState.pendingOffsetX = pendingOffsetX;
+    dragState.pendingOffsetY = pendingOffsetY;
+    (dragState.ids || [dragState.id]).forEach((itemId) => {
+      const group = findElementGroup(itemId);
+      if (group) group.setAttribute("transform", `translate(${pendingOffsetX} ${pendingOffsetY})`);
+    });
+    renderSelection(selectedElements().map((item) => ({
+      ...item,
+      x: item.x + pendingOffsetX,
+      y: item.y + pendingOffsetY,
+    })));
   }
 
   function populatePropsForm(targetForm = propsForm) {
     if (!targetForm) return;
-    const element = selectedElement();
-    if (!element) return;
+    const items = selectedElements();
+    if (!items.length) return;
+    const element = items[items.length - 1];
+    const multi = items.length > 1;
     const labelInput = targetForm.querySelector('[data-layout-prop="label"]');
     if (labelInput) {
-      labelInput.value = element.label || "";
+      labelInput.value = multi ? "" : (element.label || "");
       const labelField = labelInput.closest("[data-layout-name-field]");
       if (labelField) {
         const caption = labelField.querySelector("[data-layout-name-caption]");
@@ -1795,27 +2252,68 @@ function initializeLayoutEditor(root = document) {
     }
     const select = targetForm.querySelector('[data-layout-prop="waiter"]');
     refreshWaiterSelect(select);
-    if (select) select.value = element.waiter || "";
+    if (select) {
+      const waiter = sharedValue(items, (item) => item.waiter || "");
+      if (waiter.mixed) {
+        appendDisabledOption(select, "__mixed__", "Vários valores");
+        select.value = "__mixed__";
+      } else {
+        select.value = waiter.value;
+      }
+    }
+    const color = sharedValue(items, (item) => item.color || "");
     const colorInput = targetForm.querySelector('[data-layout-prop="color"]');
-    if (colorInput) colorInput.value = element.color || "";
-    syncColorPickerUI(targetForm, element, waiterRegistry);
-    targetForm.querySelector('[data-layout-prop="seats"]').value = element.seats || 8;
+    if (colorInput) colorInput.value = color.mixed ? "" : color.value;
+    syncColorPickerUI(targetForm, color.mixed ? { ...element, color: "" } : element, waiterRegistry);
+    const seatsInput = targetForm.querySelector('[data-layout-prop="seats"]');
+    if (seatsInput) {
+      const seats = sharedValue(items, (item) => String(item.seats || 8));
+      seatsInput.value = seats.mixed ? "" : seats.value;
+      seatsInput.placeholder = seats.mixed ? "Vários" : "";
+    }
     const sizeSelect = targetForm.querySelector('[data-layout-prop="tableSize"]');
-    if (sizeSelect) sizeSelect.value = inferTableSize(element);
-    targetForm.querySelector('[data-layout-prop="width"]').value = Math.round(element.width);
-    targetForm.querySelector('[data-layout-prop="height"]').value = Math.round(element.height);
-    updatePropsFieldVisibility(targetForm, element);
+    if (sizeSelect) {
+      const size = sharedValue(items, (item) => inferTableSize(item));
+      if (size.mixed) {
+        appendDisabledOption(sizeSelect, "__mixed__", "Vários valores");
+        sizeSelect.value = "__mixed__";
+      } else {
+        sizeSelect.value = size.value;
+      }
+    }
+    const widthInput = targetForm.querySelector('[data-layout-prop="width"]');
+    const heightInput = targetForm.querySelector('[data-layout-prop="height"]');
+    const width = sharedValue(items, (item) => String(Math.round(item.width)));
+    const height = sharedValue(items, (item) => String(Math.round(item.height)));
+    if (widthInput) {
+      widthInput.value = width.mixed ? "" : width.value;
+      widthInput.placeholder = width.mixed ? "Vários" : "";
+    }
+    if (heightInput) {
+      heightInput.value = height.mixed ? "" : height.value;
+      heightInput.placeholder = height.mixed ? "Vários" : "";
+    }
+    updatePropsFieldVisibility(targetForm, items);
   }
 
-  function updatePropsFieldVisibility(targetForm, element) {
-    if (!targetForm || !element) return;
-    const isTable = element.type === "table_round" || element.type === "table_rect";
-    const isMarker = element.type === "marker";
+  function updatePropsFieldVisibility(targetForm, elements) {
+    const items = Array.isArray(elements) ? elements : elements ? [elements] : [];
+    if (!targetForm || !items.length) return;
+    const multi = items.length > 1;
+    const allTables = items.every(isTableElement);
+    const allMarkers = items.every((item) => item.type === "marker");
+    const anyWaiter = items.some((item) => (item.waiter || "").trim());
+    targetForm.querySelectorAll("[data-layout-name-field]").forEach((node) => {
+      node.hidden = multi;
+    });
     targetForm.querySelectorAll("[data-layout-table-field]").forEach((node) => {
-      node.hidden = !isTable;
+      node.hidden = !allTables;
+    });
+    targetForm.querySelectorAll("[data-layout-color-field]").forEach((node) => {
+      node.hidden = !allTables || anyWaiter;
     });
     targetForm.querySelectorAll("[data-layout-marker-field]").forEach((node) => {
-      node.hidden = !isMarker;
+      node.hidden = !allMarkers;
     });
   }
 
@@ -1826,6 +2324,12 @@ function initializeLayoutEditor(root = document) {
   }
 
   function syncPropsPanel() {
+    const selectedTableCount = selectedElements().filter(isTableElement).length;
+    editor.querySelectorAll("[data-layout-table-action]").forEach((button) => {
+      button.disabled = selectedTableCount === 0;
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+    });
+    if (propsPanel) propsPanel.hidden = !selectedIds.size || isMobileLayout();
     if (isPropsFormEditing()) return;
     populatePropsForm(propsForm);
     if (floatSheet && !floatSheet.hidden && floatSheet.dataset.open === "props" && isMobileLayout()) {
@@ -1834,21 +2338,52 @@ function initializeLayoutEditor(root = document) {
   }
 
   function applyProp(name, value) {
-    const element = selectedElement();
-    if (!element) return;
-    if (name === "seats") element.seats = Math.max(1, Number(value) || 8);
-    else if (name === "tableSize") applyTableSize(element, value);
-    else if (name === "width" && element.type === "marker") element.width = snapSize(Number(value) || element.width);
-    else if (name === "height" && element.type === "marker") element.height = snapSize(Number(value) || element.height);
-    else if (name === "waiter") {
-      element.waiter = value;
-      element.color = "";
-    } else if (name === "color") element.color = value;
-    else element[name] = value;
+    if (value === "__mixed__") return;
+    const items = selectedElements();
+    if (!items.length) return;
+    items.forEach((element) => {
+      if (name === "label") {
+        if (items.length > 1) return;
+        element.label = value;
+        return;
+      }
+      if (name === "seats") {
+        if (!isTableElement(element) || value === "") return;
+        element.seats = Math.max(1, Number(value) || 8);
+        return;
+      }
+      if (name === "tableSize") {
+        if (!isTableElement(element)) return;
+        applyTableSize(element, value);
+        return;
+      }
+      if (name === "width" && element.type === "marker") {
+        if (value === "") return;
+        element.width = snapSize(Number(value) || element.width);
+        return;
+      }
+      if (name === "height" && element.type === "marker") {
+        if (value === "") return;
+        element.height = snapSize(Number(value) || element.height);
+        return;
+      }
+      if (name === "waiter") {
+        if (!isTableElement(element)) return;
+        element.waiter = value;
+        element.color = "";
+        return;
+      }
+      if (name === "color") {
+        if ((element.waiter || "").trim()) return;
+        element.color = value;
+        return;
+      }
+      element[name] = value;
+    });
     render();
   }
 
-  function createTableElement(type, x, y, labelNumber, size = "medium") {
+  function createTableElement(type, x, y, labelNumber, size = "medium", waiter = placementWaiter) {
     const dims = tableDimensions(type, size);
     const width = dims.width;
     const height = dims.height;
@@ -1862,7 +2397,7 @@ function initializeLayoutEditor(root = document) {
       height,
       tableSize: size,
       label: `Mesa ${labelNumber}`,
-      waiter: "",
+      waiter: (waiter || "").trim(),
       color: "",
       seats: 8,
       zIndex: state.elements.length + 1,
@@ -1874,19 +2409,14 @@ function initializeLayoutEditor(root = document) {
     const specs = buildRowTableSpecs(startX, startY, config, labelNumber);
     const waiter = (config.waiter || "").trim();
     const created = specs.map((spec, index) => {
-      const table = createTableElement(spec.type, spec.x, spec.y, labelNumber + index + 1);
+      const table = createTableElement(spec.type, spec.x, spec.y, labelNumber + index + 1, "medium", waiter);
       table.x = spec.x;
       table.y = spec.y;
       table.zIndex = state.elements.length + index + 1;
-      if (waiter) table.waiter = waiter;
       return table;
     });
     state.elements.push(...created);
-    if (created.length) selectElement(created[0].id);
-  }
-
-  function closeRowPanel() {
-    if (rowPanel) rowPanel.hidden = true;
+    if (created.length) selectedIds = new Set(created.map((table) => table.id));
   }
 
   function readRowFormValues(form) {
@@ -1913,9 +2443,8 @@ function initializeLayoutEditor(root = document) {
 
   function openDesktopEditPanel() {
     closeSheet();
-    closeRowPanel();
-    if (!selectedElement()) {
-      showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use Editar, ou arraste para mover.");
+    if (!selectedIds.size) {
+      showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. No computador, clique e arraste no desenho para selecionar várias.");
       return;
     }
     if (propsPanel) {
@@ -1926,16 +2455,10 @@ function initializeLayoutEditor(root = document) {
   }
 
   function openRowSheet() {
-    if (!isMobileLayout()) {
-      closeSheet();
-      if (rowPanel) {
-        rowPanel.hidden = false;
-        bindRowForm(rowForm);
-        refreshWaiterSelect(rowForm?.querySelector('[name="waiter"]'));
-      }
-      return;
-    }
     if (!floatSheet || !floatSheetBody) return;
+    const rect = viewportRect();
+    floatSheet.style.setProperty("--layout-modal-center-x", `${rect.left + rect.width / 2}px`);
+    floatSheet.style.setProperty("--layout-modal-center-y", `${rect.top + rect.height / 2}px`);
     floatSheet.hidden = false;
     floatSheet.dataset.open = "row";
     document.body.classList.add("layout-sheet-open");
@@ -1960,11 +2483,12 @@ function initializeLayoutEditor(root = document) {
       <label>Garçom responsável (opcional)
         <select name="waiter"><option value="">Sem garçom</option></select>
       </label>
-      <p class="layout-sheet-hint">A fileira aparecerá selecionada no canvas para você arrastar e confirmar a posição.</p>
+      <p class="layout-sheet-hint">A fileira será criada no centro do desenho. Depois, você poderá arrastá-la antes de confirmar.</p>
       <button class="button primary full" type="submit">Preparar fileira</button>
     `;
     bindRowForm(form);
     floatSheetBody.append(form);
+    window.requestAnimationFrame(() => form.querySelector('[name="count"]')?.focus());
   }
 
   function addElement(type, point) {
@@ -1975,8 +2499,8 @@ function initializeLayoutEditor(root = document) {
       const snapped = snapPosition(point.x - width / 2, point.y - height / 2, width, height);
       const table = createTableElement(type, snapped.x, snapped.y, tableCountSoFar + 1);
       state.elements.push(table);
-      selectElement(table.id);
       setActiveTool("select");
+      selectElement(table.id);
       render();
       return;
     }
@@ -2004,23 +2528,50 @@ function initializeLayoutEditor(root = document) {
   }
 
   function deleteSelected() {
-    if (!selectedId) return;
-    state.elements = state.elements.filter((item) => item.id !== selectedId);
-    selectedId = null;
+    if (!selectedIds.size) return;
+    state.elements = state.elements.filter((item) => !selectedIds.has(item.id));
+    selectedIds.clear();
     if (propsPanel) propsPanel.hidden = true;
     closeSheet();
     render();
   }
 
   function duplicateSelected() {
-    const element = selectedElement();
-    if (!element) return;
-    const copy = { ...element, id: createElementId(), x: element.x + GRID_SIZE, y: element.y + GRID_SIZE, zIndex: state.elements.length + 1 };
-    const snapped = snapPosition(copy.x, copy.y, copy.width, copy.height);
-    copy.x = snapped.x;
-    copy.y = snapped.y;
-    state.elements.push(copy);
-    selectElement(copy.id);
+    const items = selectedElements();
+    if (!items.length) return;
+    const copies = items.map((element, index) => {
+      const copy = { ...element, id: createElementId(), x: element.x + GRID_SIZE, y: element.y + GRID_SIZE, zIndex: state.elements.length + index + 1 };
+      const snapped = snapPosition(copy.x, copy.y, copy.width, copy.height);
+      copy.x = snapped.x;
+      copy.y = snapped.y;
+      return copy;
+    });
+    state.elements.push(...copies);
+    selectedIds = new Set(copies.map((copy) => copy.id));
+    render();
+  }
+
+  function deleteSelectedTables() {
+    const tableIds = new Set(selectedElements().filter(isTableElement).map((table) => table.id));
+    if (!tableIds.size) return;
+    state.elements = state.elements.filter((item) => !tableIds.has(item.id));
+    tableIds.forEach((id) => selectedIds.delete(id));
+    if (!selectedIds.size && propsPanel) propsPanel.hidden = true;
+    render();
+  }
+
+  function duplicateSelectedTables() {
+    const tables = selectedElements().filter(isTableElement);
+    if (!tables.length) return;
+    const copies = tables.map((table, index) => {
+      const copy = { ...table, id: createElementId(), x: table.x + GRID_SIZE, y: table.y + GRID_SIZE, zIndex: state.elements.length + index + 1 };
+      const snapped = snapPosition(copy.x, copy.y, copy.width, copy.height);
+      copy.x = snapped.x;
+      copy.y = snapped.y;
+      return copy;
+    });
+    state.elements.push(...copies);
+    selectedIds = new Set(copies.map((copy) => copy.id));
     render();
   }
 
@@ -2039,16 +2590,15 @@ function initializeLayoutEditor(root = document) {
         if (original) original.value = input.value;
         syncStandaloneHiddenFields();
         updateStats();
-        if (editor.dataset.exportTitle !== undefined && input.name === "name") {
-          editor.dataset.exportTitle = input.value;
-          const floatTitle = editor.querySelector("[data-layout-float-title]");
-          if (floatTitle) floatTitle.textContent = input.value || "Novo layout";
+        if (editor.dataset.exportTitle !== undefined && (input.name === "name" || input.name === "venue")) {
+          syncLayoutNameFromVenue(clone);
         }
       };
       clone.querySelectorAll("input").forEach((input) => {
         input.addEventListener("input", () => syncFromClone(input));
         input.addEventListener("change", () => syncFromClone(input));
       });
+      bindVenueSearch(clone);
       floatSheetBody.append(clone);
     }
     const roster = editor.querySelector("[data-layout-waiter-roster]");
@@ -2068,7 +2618,10 @@ function initializeLayoutEditor(root = document) {
     done.type = "button";
     done.className = "button primary full";
     done.textContent = "Continuar desenhando";
-    done.addEventListener("click", closeSheet);
+    done.addEventListener("click", () => {
+      if (!requireVenueToContinue()) return;
+      closeSheet();
+    });
     floatSheetBody.append(done);
   }
 
@@ -2114,15 +2667,15 @@ function initializeLayoutEditor(root = document) {
         return;
       }
       if (!floatSheet || !floatSheetBody) return;
-      if (!selectedElement()) {
-        showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. Depois use Editar, ou arraste para mover.");
+      if (!selectedIds.size) {
+        showSheetNotice("Selecione um item", "Toque em uma mesa ou área para selecionar. No computador, clique e arraste no desenho para selecionar várias.");
         return;
       }
       floatSheet.hidden = false;
       floatSheet.dataset.open = kind;
       document.body.classList.add("layout-sheet-open");
       floatSheetBody.replaceChildren();
-      if (floatSheetTitle) floatSheetTitle.textContent = "Editar item";
+      if (floatSheetTitle) floatSheetTitle.textContent = selectedIds.size > 1 ? `Editar ${selectedIds.size} itens` : "Editar item";
       if (propsForm) {
         const clone = propsForm.cloneNode(true);
         bindPropsForm(clone);
@@ -2167,8 +2720,8 @@ function initializeLayoutEditor(root = document) {
     menu.append(division);
     [
       ["row", "Adicionar fileira de mesas"],
-      ["duplicate", "Duplicar selecionado"],
-      ["delete", "Remover selecionado"],
+      ["duplicate", "Duplicar seleção"],
+      ["delete", "Remover seleção"],
       ["png", "Exportar PNG"],
       ["pdf", "Exportar PDF"],
       ["fullscreen", fullscreenActive ? "Sair da tela cheia" : "Entrar em tela cheia"],
@@ -2239,6 +2792,8 @@ function initializeLayoutEditor(root = document) {
     floatSheet.hidden = true;
     floatSheet.classList.remove("is-notice", "is-leaving");
     delete floatSheet.dataset.open;
+    floatSheet.style.removeProperty("--layout-modal-center-x");
+    floatSheet.style.removeProperty("--layout-modal-center-y");
     document.body.classList.remove("layout-sheet-open");
     if (!isWaiterNameGridEditing()) renderWaiterNameGrid();
   }
@@ -2281,13 +2836,22 @@ function initializeLayoutEditor(root = document) {
   }
 
   editor.querySelectorAll("[data-layout-tool]").forEach((button) => {
-    button.addEventListener("click", () => setActiveTool(button.dataset.layoutTool));
+    button.addEventListener("click", () => {
+      setActiveTool(button.dataset.layoutTool);
+    });
   });
 
   editor.querySelectorAll("[data-layout-action]").forEach((button) => {
     button.addEventListener("click", () => {
       if (button.dataset.layoutAction === "delete") deleteSelected();
       if (button.dataset.layoutAction === "duplicate") duplicateSelected();
+    });
+  });
+
+  editor.querySelectorAll("[data-layout-table-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.layoutTableAction === "delete") deleteSelectedTables();
+      if (button.dataset.layoutTableAction === "duplicate") duplicateSelectedTables();
     });
   });
 
@@ -2321,22 +2885,38 @@ function initializeLayoutEditor(root = document) {
   bindPropsForm(propsForm);
 
   svg.addEventListener("pointerdown", (event) => {
+    if (pinchState || event.isPrimary === false) return;
     if (activeTool === "place_row" && pendingRow && rowPreview) {
       beginRowDrag(event);
       return;
     }
-    if (activeTool === "select" && view.scale > 1.01 && (event.target === svg || event.target.hasAttribute("data-layout-bg-fill") || event.target.hasAttribute("data-layout-bg-grid"))) {
+    const isBackground = event.target === svg || event.target.hasAttribute("data-layout-bg-fill") || event.target.hasAttribute("data-layout-bg-grid");
+    if (activeTool === "select" && isBackground) {
+      if (!isMobileLayout()) {
+        const world = clientToWorld(event.clientX, event.clientY);
+        marqueeState = {
+          startX: world.x,
+          startY: world.y,
+          currentX: world.x,
+          currentY: world.y,
+          baseline: new Set(),
+          keepOnClick: false,
+          pointerId: event.pointerId,
+        };
+        svg.setPointerCapture(event.pointerId);
+        renderMarquee();
+        return;
+      }
       panState = { startX: event.clientX, startY: event.clientY, originX: view.x, originY: view.y };
       svg.setPointerCapture(event.pointerId);
       selectElement(null);
       return;
     }
     if (activeTool === "select") {
-      const isBackground = event.target.hasAttribute("data-layout-bg-fill") || event.target.hasAttribute("data-layout-bg-grid");
-      if (event.target === svg || isBackground) selectElement(null);
+      if (isBackground) selectElement(null);
       return;
     }
-    addElement(activeTool, svgPoint(svg, event.clientX, event.clientY));
+    addElement(activeTool, clientToWorld(event.clientX, event.clientY));
   });
 
   svg.addEventListener("pointermove", (event) => {
@@ -2348,11 +2928,13 @@ function initializeLayoutEditor(root = document) {
       updateRowDrag(event);
       return;
     }
+    if (marqueeState) {
+      updateMarquee(event);
+      return;
+    }
     if (panState) {
-      const matrix = svg.getScreenCTM();
-      if (!matrix) return;
-      view.x = panState.originX - (event.clientX - panState.startX) / matrix.a;
-      view.y = panState.originY - (event.clientY - panState.startY) / matrix.d;
+      view.x = panState.originX - (event.clientX - panState.startX) / view.scale;
+      view.y = panState.originY - (event.clientY - panState.startY) / view.scale;
       clampView();
       updateViewBox();
     }
@@ -2361,23 +2943,79 @@ function initializeLayoutEditor(root = document) {
   svg.addEventListener("pointerup", (event) => {
     finishResize(event);
     finishRowDrag(event);
+    finishMarquee();
     panState = null;
   });
 
   svg.addEventListener("pointercancel", (event) => {
     finishResize(event);
     finishRowDrag(event);
+    finishMarquee();
     panState = null;
   });
 
+  function touchDistance(first, second) {
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+  }
+
+  function touchMidpoint(first, second) {
+    return { x: (first.clientX + second.clientX) / 2, y: (first.clientY + second.clientY) / 2 };
+  }
+
   viewport?.addEventListener("touchstart", (event) => {
-    if (event.touches.length === 2) event.preventDefault();
+    if (event.touches.length < 2) return;
+    event.preventDefault();
+    const [first, second] = event.touches;
+    pinchState = {
+      distance: Math.max(1, touchDistance(first, second)),
+      mid: touchMidpoint(first, second),
+      scale: view.scale,
+    };
+    panState = null;
+    dragState = null;
+    resizeState = null;
+    marqueeState = null;
+  }, { passive: false });
+
+  viewport?.addEventListener("touchmove", (event) => {
+    if (!pinchState || event.touches.length < 2) return;
+    event.preventDefault();
+    const [first, second] = event.touches;
+    const dist = Math.max(1, touchDistance(first, second));
+    const mid = touchMidpoint(first, second);
+    setScaleAroundClient(mid.x, mid.y, pinchState.scale * (dist / pinchState.distance));
+  }, { passive: false });
+
+  const endPinch = () => {
+    pinchState = null;
+  };
+  viewport?.addEventListener("touchend", endPinch);
+  viewport?.addEventListener("touchcancel", endPinch);
+
+  viewport?.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const factor = event.deltaY > 0 ? 0.9 : 1.1;
+    setScaleAroundClient(event.clientX, event.clientY, view.scale * factor);
   }, { passive: false });
 
   bindDivisionControls(editor);
 
   document.addEventListener("keydown", (event) => {
     if (!editor.isConnected) return;
+    const active = document.activeElement;
+    const isEditingField = active?.matches?.("input, textarea, select, [contenteditable='true']");
+    const shortcutKey = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !isEditingField && shortcutKey === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redoLayout();
+      else undoLayout();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !isEditingField && shortcutKey === "y") {
+      event.preventDefault();
+      redoLayout();
+      return;
+    }
     if (event.key === "Escape" && activeTool === "place_row") {
       cancelRowPreview();
       return;
@@ -2393,6 +3031,14 @@ function initializeLayoutEditor(root = document) {
       deleteSelected();
     }
   });
+
+  editor.querySelectorAll("[data-layout-history]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.layoutHistory === "undo") undoLayout();
+      if (button.dataset.layoutHistory === "redo") redoLayout();
+    });
+  });
+  updateHistoryButtons();
 
   editor.querySelectorAll("[data-layout-export]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -2421,10 +3067,12 @@ function initializeLayoutEditor(root = document) {
 
   metaForm?.querySelectorAll("input").forEach((input) => {
     input.addEventListener("input", () => {
+      if (input.name === "venue" || input.name === "name") syncLayoutNameFromVenue();
       syncStandaloneHiddenFields();
       updateStats();
     });
   });
+  bindVenueSearch(metaForm);
 
   editor.addEventListener("input", (event) => {
     const countInput = event.target.closest("[data-layout-waiter-count]");
@@ -2443,20 +3091,25 @@ function initializeLayoutEditor(root = document) {
     persistHiddenInput();
   });
 
-  saveForm?.addEventListener("submit", () => {
+  saveForm?.addEventListener("submit", (event) => {
     persistHiddenInput();
+    if (!requireVenueToContinue()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     cleanupLayoutEditorState(editor);
   }, { capture: true });
 
   saveForm && (saveForm.dataset.loadedAt = new Date().toISOString());
 
   MOBILE_LAYOUT_QUERY.addEventListener("change", () => {
-    if (propsPanel) propsPanel.hidden = !selectedId || isMobileLayout();
-    if (!isMobileLayout()) closeSheet();
-    else closeRowPanel();
+    if (propsPanel) propsPanel.hidden = !selectedIds.size || isMobileLayout();
+    syncPlacementWaiterUI();
+    closeSheet();
   });
 
-  bindRowForm(rowForm);
+  bindPlacementWaiter();
 
   syncConfiguredWaiters({ rebuildGrid: true });
   restoreLayoutDraftIfNeeded().finally(() => {

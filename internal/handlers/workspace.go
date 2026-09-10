@@ -16,7 +16,7 @@ func workspaceFor(request *http.Request, nav string) string {
 	if nav == "offline" {
 		return "offline"
 	}
-	if workspaceFromRequest(request) == "offline" && offlineCapableNav(nav) {
+	if workspaceFromRequest(request) == "offline" && offlineCapableNav(nav) && nav != "layouts" {
 		return "offline"
 	}
 	return "online"
@@ -71,10 +71,8 @@ func (a *App) health(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "service": "emenysFlow"})
 }
 
-func (a *App) workspaceChooser(writer http.ResponseWriter, request *http.Request) {
-	data := a.baseData(request, "Escolher área", "workspace")
-	data.Workspace = ""
-	a.render(writer, request, "workspace", data)
+func (a *App) redirectOnlineHome(writer http.ResponseWriter, request *http.Request) {
+	a.redirect(writer, request, "/", http.StatusSeeOther)
 }
 
 func (a *App) onlineDashboard(writer http.ResponseWriter, request *http.Request) {
@@ -125,7 +123,7 @@ func (a *App) setWorkspace(writer http.ResponseWriter, request *http.Request) {
 		a.redirect(writer, request, "/offline", http.StatusSeeOther)
 		return
 	}
-	a.redirect(writer, request, "/online", http.StatusSeeOther)
+	a.redirect(writer, request, "/", http.StatusSeeOther)
 }
 
 func safeWorkspaceNext(next string, request *http.Request) string {

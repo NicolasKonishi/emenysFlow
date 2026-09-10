@@ -14,64 +14,91 @@ import (
 )
 
 func (a *App) operationHub(w http.ResponseWriter, r *http.Request) {
+	a.renderEventChecklist(w, r)
+}
+
+func (a *App) renderEventChecklist(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	data := a.baseData(r, "Checklist do evento", operationNav(r))
 	event, err := a.store.GetEvent(r.Context(), id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	data.Event = event
 	checklist, err := a.store.GetChecklistByEvent(r.Context(), id)
+	if err == sql.ErrNoRows {
+		checklist, err = a.checklist.GenerateTracked(r.Context(), id, "initial_generation", currentUser(r).ID)
+	}
 	if err != nil {
-		http.NotFound(w, r)
+		data.Error = databaseErrorMessage(err)
+		a.render(w, r, "event_show", data)
 		return
 	}
 	shortages, err := a.store.ListEventShortages(r.Context(), id, true)
 	if err != nil {
-		http.Error(w, databaseErrorMessage(err), 500)
+		data.Error = databaseErrorMessage(err)
+		a.render(w, r, "event_show", data)
 		return
 	}
-	activeShortages := map[int64]*models.ChecklistShortage{}
-	for index := range shortages {
-		if shortages[index].Status != "resolved" && shortages[index].Status != "cancelled" {
-			activeShortages[shortages[index].ChecklistItemID] = &shortages[index]
-		}
-	}
+	tab := operationTab(r)
+	data.Checklist = filterChecklistForTab(checklist, shortages, tab)
+	data.Groups = groupChecklist(data.Checklist.Items)
+	data.Shortages = activeShortages(shortages)
+	data.ActiveTab = tab
+	a.render(w, r, "event_show", data)
+}
+
+func operationTab(r *http.Request) string {
 	tab := r.URL.Query().Get("tab")
 	if tab != "loading" && tab != "missing" {
-		tab = "separation"
+		return "separation"
+	}
+	return tab
+}
+
+func activeShortages(shortages []models.ChecklistShortage) []models.ChecklistShortage {
+	active := make([]models.ChecklistShortage, 0, len(shortages))
+	for _, shortage := range shortages {
+		if shortage.Status != "resolved" && shortage.Status != "cancelled" {
+			active = append(active, shortage)
+		}
+	}
+	return active
+}
+
+func filterChecklistForTab(checklist models.Checklist, shortages []models.ChecklistShortage, tab string) models.Checklist {
+	active := map[int64]*models.ChecklistShortage{}
+	for index := range shortages {
+		if shortages[index].Status != "resolved" && shortages[index].Status != "cancelled" {
+			active[shortages[index].ChecklistItemID] = &shortages[index]
+		}
 	}
 	filtered := make([]models.ChecklistItem, 0, len(checklist.Items))
 	for _, item := range checklist.Items {
-		item.Shortage = activeShortages[item.ID]
+		item.Shortage = active[item.ID]
 		if tab == "missing" {
 			if item.Shortage != nil {
 				filtered = append(filtered, item)
 			}
 			continue
 		}
-		if item.Shortage != nil {
+		// Purchases and rentals remain visible in the separation checklist so
+		// the team can explicitly keep them as "Aguardando" until they arrive.
+		if item.Shortage != nil && !item.CanAwait() {
 			continue
 		}
-		if tab == "loading" && item.SeparatedQuantity+0.0001 < item.RequiredQuantity {
+		if tab == "loading" && (item.Status == "not_applicable" || item.SeparatedQuantity+0.0001 < item.RequiredQuantity) {
 			continue
 		}
 		filtered = append(filtered, item)
 	}
 	checklist.Items = filtered
-	data := a.baseData(r, "Operação do evento", operationNav(r))
-	data.Event = event
-	data.Checklist = checklist
-	data.Groups = groupChecklist(checklist.Items)
-	data.Shortages = shortages
-	data.ActiveTab = tab
-	data.Categories, _ = a.store.ListCategories(r.Context())
-	data.Items, _ = a.store.ListInventory(r.Context(), "", "", false)
-	data.StaffSummary, _ = a.checklist.StaffSummary(r.Context(), id)
-	a.render(w, r, "operations_hub", data)
+	return checklist
 }
 
 func (a *App) operationQuantity(w http.ResponseWriter, r *http.Request) {
@@ -190,6 +217,9 @@ func errorText(err error) string {
 	if err == nil {
 		return ""
 	}
+	if strings.Contains(err.Error(), "version conflict") {
+		return "Este item foi atualizado em outro lugar. Atualize a lista e tente de novo."
+	}
 	return err.Error()
 }
 func statusForOperationError(err error) int {
@@ -208,6 +238,6 @@ func operationRedirect(w http.ResponseWriter, r *http.Request, eventID int64, ta
 		kind = "danger"
 		message = databaseErrorMessage(err)
 	}
-	target := fmt.Sprintf("/events/%d/operation?tab=%s&type=%s&message=%s", eventID, url.QueryEscape(tab), kind, url.QueryEscape(message))
+	target := fmt.Sprintf("/events/%d?tab=%s&type=%s&message=%s", eventID, url.QueryEscape(tab), kind, url.QueryEscape(message))
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }

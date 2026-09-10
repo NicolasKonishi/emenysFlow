@@ -11,7 +11,21 @@ document.addEventListener("submit", (event) => {
 
 document.addEventListener("click",(event)=>{
   if(event.target.closest("[data-print]"))window.print();
-  if(event.target.closest("[data-group-check]"))event.stopPropagation();
+  if(event.target.closest("[data-group-check], [data-group-check-all], [data-group-defer]"))event.stopPropagation();
+  const removeChoice = event.target.closest("[data-remove-model-choice]");
+  if (removeChoice) {
+    const row = removeChoice.closest(".model-choice");
+    if (!row) return;
+    event.preventDefault();
+    const checkbox = row.querySelector('input[name="model_item_ids"]');
+    if (checkbox) {
+      checkbox.checked = false;
+      checkbox.disabled = true;
+      row.hidden = true;
+      return;
+    }
+    row.remove();
+  }
 });
 
 function restorePreservedScroll() {
@@ -224,14 +238,36 @@ function initializeSimpleChecklist(root = document) {
     const form = list.closest("form");
     const finalizeButton = form ? form.querySelector("[data-loading-finalize]") : null;
     const progress = list.querySelector("[data-loading-progress]");
+    const group = list.closest("[data-checklist-group]");
+    const checkAll = group?.querySelector("[data-group-check-all]");
+    const deferButton = group?.querySelector("[data-group-defer]");
+    const laterKey = () => `emenys-group-later:${list.dataset.eventId || "0"}:${list.dataset.stage || "separation"}:${group?.dataset.groupKey || ""}`;
+    const pendingCards = () => cards.filter((card) => card.dataset.state === "pending" || card.dataset.state === "waiting");
+    const refreshGroupActions = () => {
+      if (checkAll) checkAll.disabled = pendingCards().length === 0;
+    };
 
     const updateProgress = () => {
-      const decided = cards.filter((card) => card.dataset.state === "done" || card.dataset.state === "missing").length;
+      const decided = cards.filter((card) => card.dataset.state === "done" || card.dataset.state === "missing" || card.dataset.state === "not-have").length;
       if (progress) progress.textContent = `${decided} de ${cards.length}`;
       if (finalizeButton && cards.length > 0) {
         finalizeButton.disabled = decided !== cards.length;
         finalizeButton.title = decided === cards.length ? "" : "Marque todos os itens antes de finalizar.";
       }
+    };
+
+    const cardLabel = (card, kind) => {
+      if (kind === "missing") return card.dataset.missingLabel || "Sem estoque";
+      if (kind === "waiting") return card.dataset.waitingLabel || "Aguardando";
+      if (kind === "not-have") return card.dataset.notHaveLabel || "Não terá";
+      return card.dataset.doneLabel || "Conferido";
+    };
+
+    const stateForAction = (kind) => {
+      if (kind === "missing") return "missing";
+      if (kind === "waiting") return "waiting";
+      if (kind === "not-have") return "not-have";
+      return "done";
     };
 
     const setCardState = (card, state, message) => {
@@ -241,11 +277,17 @@ function initializeSimpleChecklist(root = document) {
       }
       card.classList.toggle("is-done", state === "done");
       card.classList.toggle("is-missing", state === "missing");
+      card.classList.toggle("is-waiting", state === "waiting");
+      card.classList.toggle("is-not-have", state === "not-have");
       const status = card.querySelector("[data-simple-status]");
-      if (status) status.textContent = message || (state === "done" ? "Conferido" : state === "missing" ? "Sem estoque" : "");
+      if (status) {
+        const labelKind = state === "done" ? "check" : state;
+        status.textContent = message || (state === "pending" ? "" : cardLabel(card, labelKind));
+      }
       const hiddenQuantity = form ? form.querySelector(`input[name="quantity_${card.dataset.itemId}"]`) : null;
       if (hiddenQuantity && state === "done") hiddenQuantity.value = card.dataset.required || hiddenQuantity.value;
       updateProgress();
+      refreshGroupActions();
     };
 
     const postAction = async (card, kind) => {
@@ -267,34 +309,44 @@ function initializeSimpleChecklist(root = document) {
             required,
             version: Number(card.dataset.version || 0),
           });
-          setCardState(card, kind === "missing" ? "missing" : "done", kind === "missing" ? "Sem estoque — no aparelho" : "Conferido — no aparelho");
+          setCardState(card, stateForAction(kind), `${cardLabel(card, kind)} — no aparelho`);
           return;
         }
-        const body = new URLSearchParams();
-        let url = kind === "missing" ? card.dataset.missingUrl : card.dataset.checkUrl;
-        if (card.dataset.mode === "loading-decision") {
-          body.set("decision", kind === "missing" ? "missing" : "complete");
-          body.set("missing_quantity", kind === "missing" ? required : "0");
-          url = card.dataset.saveUrl || url;
-        } else if (kind === "missing") {
-          body.set("missing_quantity", required);
-          body.set("reason", "Não tem no estoque");
-          body.set("resolution_type", "other");
-        } else {
-          body.set("stage", card.dataset.stage || "separation");
-          body.set("quantity", required);
-          body.set("version", card.dataset.version || "0");
+        const submit = (versionValue) => {
+          const body = new URLSearchParams();
+          let url = kind === "missing" ? card.dataset.missingUrl : card.dataset.checkUrl;
+          if (kind === "waiting" || kind === "not-have") {
+            body.set("event_id", String(eventID));
+            body.set("status", kind === "waiting" ? "pending" : "not_applicable");
+            url = card.dataset.statusUrl;
+          } else if (card.dataset.mode === "loading-decision") {
+            body.set("decision", kind === "missing" ? "missing" : "complete");
+            body.set("missing_quantity", kind === "missing" ? required : "0");
+            url = card.dataset.saveUrl || url;
+          } else if (kind === "missing") {
+            body.set("missing_quantity", required);
+            body.set("reason", "Não tem no estoque");
+            body.set("resolution_type", "other");
+          } else {
+            body.set("stage", card.dataset.stage || "separation");
+            body.set("quantity", required);
+            body.set("version", versionValue);
+          }
+          return fetch(url, {
+            method: "POST",
+            body,
+            credentials: "same-origin",
+            headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" },
+          });
+        };
+        let response = await submit(card.dataset.version || "0");
+        if (response.status === 409 && kind !== "missing" && kind !== "waiting" && kind !== "not-have") {
+          response = await submit("0");
         }
-        const response = await fetch(url, {
-          method: "POST",
-          body,
-          credentials: "same-origin",
-          headers: { Accept: "application/json", "X-BuffetFlow-Client": "pwa" },
-        });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || "Não foi possível salvar.");
         if (result.version) card.dataset.version = String(result.version);
-        setCardState(card, kind === "missing" ? "missing" : "done");
+        setCardState(card, stateForAction(kind));
       } catch (error) {
         if (status) status.textContent = error.message || "Não foi possível salvar.";
       } finally {
@@ -314,21 +366,30 @@ function initializeSimpleChecklist(root = document) {
 
     cards.forEach((card) => {
       const front = card.querySelector(".simple-check-front");
-      card.querySelector("[data-simple-check]")?.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        postAction(card, "check");
-      });
-      card.querySelector("[data-simple-missing]")?.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        postAction(card, "missing");
-      });
+      const isActionControl = (target) => Boolean(target?.closest?.("button, [data-simple-check], [data-simple-missing]"));
+      const checkButton = card.querySelector("[data-simple-check]");
+      const missingButton = card.querySelector("[data-simple-missing]");
+      const waitingButton = card.querySelector("[data-simple-waiting]");
+      const notHaveButton = card.querySelector("[data-simple-not-have]");
+      const bindAction = (button, kind) => {
+        if (!button) return;
+        button.addEventListener("pointerdown", (event) => event.stopPropagation());
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          postAction(card, kind);
+        });
+      };
+      bindAction(checkButton, "check");
+      bindAction(missingButton, "missing");
+      bindAction(waitingButton, "waiting");
+      bindAction(notHaveButton, "not-have");
       if (!front) return;
 
       let pointer = null;
       const startSwipe = (event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
+        if (isActionControl(event.target)) return;
         pointer = {
           id: event.pointerId,
           x: event.clientX,
@@ -367,7 +428,7 @@ function initializeSimpleChecklist(root = document) {
           return;
         }
         if (dx <= -72) {
-          postAction(card, "missing");
+          postAction(card, card.dataset.stage === "separation" ? "not-have" : "missing");
           return;
         }
         resetSwipe(card);
@@ -379,13 +440,57 @@ function initializeSimpleChecklist(root = document) {
       front.addEventListener("pointerup", endSwipe);
       front.addEventListener("pointercancel", endSwipe);
       front.addEventListener("click", (event) => {
+        if (isActionControl(event.target)) return;
         if (card.dataset.didSwipe !== "1") return;
         event.preventDefault();
         event.stopPropagation();
         card.dataset.didSwipe = "";
       }, true);
     });
+    if (group?.tagName === "DETAILS") {
+      try {
+        if (sessionStorage.getItem(laterKey()) === "1") group.open = false;
+      } catch (_error) {
+        // Ignore storage access errors in private browsing.
+      }
+    }
+    if (checkAll) {
+      checkAll.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const pending = pendingCards();
+        if (pending.length === 0) return;
+        const groupName = group?.querySelector(".checklist-group-heading h2")?.textContent.trim() || "esta classe";
+        const actionLabel = /separar/i.test(checkAll.textContent) ? "Separar" : "Conferir";
+        const itemLabel = pending.length === 1 ? "item" : "itens";
+        if (!window.confirm(`${actionLabel} ${pending.length} ${itemLabel} de ${groupName}?`)) return;
+        checkAll.disabled = true;
+        try {
+          sessionStorage.removeItem(laterKey());
+        } catch (_error) {
+          // Ignore storage access errors in private browsing.
+        }
+        if (group?.tagName === "DETAILS") group.open = true;
+        for (const card of pending) {
+          await postAction(card, "check");
+        }
+        refreshGroupActions();
+      });
+    }
+    if (deferButton) {
+      deferButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (group?.tagName === "DETAILS") group.open = false;
+        try {
+          sessionStorage.setItem(laterKey(), "1");
+        } catch (_error) {
+          // Ignore storage access errors in private browsing.
+        }
+      });
+    }
     updateProgress();
+    refreshGroupActions();
   });
 }
 
@@ -485,6 +590,38 @@ function initializeRentedDecorations(root = document) {
   });
 }
 
+function initializeCustomMenuItems(root = document) {
+  root.querySelectorAll("[data-custom-menu-items]").forEach((editor) => {
+    if (editor.dataset.customMenuItemsInitialized === "true") return;
+    editor.dataset.customMenuItemsInitialized = "true";
+    const template = editor.querySelector("[data-custom-menu-item-template]");
+    const addButton = editor.querySelector("[data-add-custom-menu-item]");
+    if (!template || !addButton) return;
+
+    addButton.addEventListener("click", () => {
+      const row = template.content.firstElementChild?.cloneNode(true);
+      if (!row) return;
+      addButton.before(row);
+      const input = row.querySelector(".model-item-name-input");
+      input?.focus();
+      row.dataset.fixedChoiceBound = "true";
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("button, input, a")) return;
+        input?.focus();
+      });
+    });
+  });
+
+  root.querySelectorAll(".model-choice.fixed").forEach((row) => {
+    if (row.dataset.fixedChoiceBound === "true") return;
+    row.dataset.fixedChoiceBound = "true";
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, input, a")) return;
+      row.querySelector(".model-item-name-input")?.focus();
+    });
+  });
+}
+
 function initializeChecklistObservations(root = document) {
   root.querySelectorAll("[data-checklist-observations-editor]").forEach((editor) => {
     if (editor.dataset.checklistObservationsInitialized === "true") return;
@@ -539,6 +676,28 @@ function initializeInventoryInternalCode(root = document) {
   });
 }
 
+function initializeEventVenueName(root = document) {
+  root.querySelectorAll('form.form-layout input[name="venue"]').forEach((venue) => {
+    if (venue.dataset.venueNameBound === "1") return;
+    venue.dataset.venueNameBound = "1";
+    const form = venue.closest("form");
+    const name = form?.querySelector('input[name="name"]');
+    const sync = () => {
+      if (name) name.value = venue.value.trim();
+    };
+    venue.addEventListener("input", sync);
+    venue.addEventListener("change", sync);
+    sync();
+  });
+}
+
+function watchMenuModelPreview(root = document) {
+  const preview = root.querySelector?.("#menu-model-preview") || document.getElementById("menu-model-preview");
+  if (!preview || preview.dataset.customMenuObserver === "true") return;
+  preview.dataset.customMenuObserver = "true";
+  new MutationObserver(() => initializeCustomMenuItems(document)).observe(preview, { childList: true, subtree: true });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
 	restorePreservedScroll();
   updatePrimaryNavigation();
@@ -551,7 +710,10 @@ document.addEventListener("DOMContentLoaded", () => {
 	initializeEventCakeToggle();
 	initializeRentedDecorations();
 	initializeChecklistObservations();
+	initializeCustomMenuItems();
+	watchMenuModelPreview();
 	initializeInventoryInternalCode();
+	initializeEventVenueName();
 });
 
 document.addEventListener("htmx:beforeRequest", (event) => {
@@ -563,16 +725,26 @@ document.addEventListener("htmx:pushedIntoHistory", () => {
   updatePrimaryNavigation();
 });
 
-document.addEventListener("htmx:afterSwap", (event) => {
+function refreshAfterSwap(root = document) {
   updatePrimaryNavigation();
-  initializeMenuTemplateSelectors(event.target);
-  initializeMenuModelFallback(event.target);
-  initializePDFSharing(event.target);
-  initializeMobileLoading(event.target);
-	initializeMenuCategoryRules(event.target);
-	initializeEventDecorationToggle(event.target);
-	initializeEventCakeToggle(document);
-	initializeRentedDecorations(event.target);
-	initializeChecklistObservations(event.target);
-	initializeInventoryInternalCode(event.target);
-});
+  initializeMenuTemplateSelectors(root);
+  initializeMenuModelFallback(root);
+  initializePDFSharing(root);
+  initializeMobileLoading(root);
+  initializeMenuCategoryRules(root);
+  initializeEventDecorationToggle(root);
+  initializeEventCakeToggle(document);
+  initializeRentedDecorations(root);
+  initializeChecklistObservations(root);
+  initializeCustomMenuItems(document);
+  watchMenuModelPreview(document);
+  initializeInventoryInternalCode(root);
+  initializeEventVenueName(root);
+}
+
+document.addEventListener("htmx:afterSwap", (event) => {
+  refreshAfterSwap(event.detail?.target || event.target || document);
+}, true);
+document.addEventListener("htmx:afterSettle", () => {
+  initializeCustomMenuItems(document);
+}, true);

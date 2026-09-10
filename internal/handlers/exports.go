@@ -226,40 +226,7 @@ func buildSimplePDF(event models.Event, checklist models.Checklist) []byte {
 }
 
 func groupChecklistForPDF(items []models.ChecklistItem) []models.ChecklistGroup {
-	definitions := []models.ChecklistGroup{
-		{Key: "material", Category: "Material", Completed: true},
-		{Key: "food_drink", Category: "Comida / Bebida", Completed: true},
-		{Key: "decoration", Category: "Decoração", Completed: true},
-		{Key: "team", Category: "Equipe", Completed: true},
-	}
-	groupIndexes := map[string]int{"material": 0, "food_drink": 1, "decoration": 2, "team": 3}
-	for _, item := range items {
-		key := checklistPDFGroup(item)
-		index := groupIndexes[key]
-		definitions[index].Items = append(definitions[index].Items, item)
-		if !checklistStatusCompleted(item.Status) {
-			definitions[index].Completed = false
-		}
-	}
-	groups := make([]models.ChecklistGroup, 0, len(definitions))
-	for _, group := range definitions {
-		if len(group.Items) > 0 {
-			groups = append(groups, group)
-		}
-	}
-	return groups
-}
-
-func checklistPDFGroup(item models.ChecklistItem) string {
-	operationalGroup := checklistOperationalGroup(item)
-	if operationalGroup != "material" {
-		return operationalGroup
-	}
-	switch strings.ToLower(strings.TrimSpace(item.CategoryName)) {
-	case "comidas", "bebidas", "bolo e doces", "sobremesas":
-		return "food_drink"
-	}
-	return "material"
+	return groupChecklist(items)
 }
 
 func pdfEscape(value string) string {

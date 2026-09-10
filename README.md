@@ -1,6 +1,6 @@
 # emenysFlow
 
-Sistema web para **planejar, calcular e operar eventos de buffet** — **modo online** com o sistema completo, e **modo offline** com checklists salvas e organizador de layout. Você escolhe a área depois do login; se a conexão cair, o modo offline abre sozinho.
+Sistema web para **planejar, calcular e operar eventos de buffet** — **modo online** com o sistema completo, e **modo offline** com checklists salvas e organizador de layout. Depois do login o aparelho escolhe sozinho: se houver conexão, abre o sistema online; se não reconhecer o serviço, fica offline.
 
 Projeto pessoal que demonstra backend em Go, domínio rico, PWA offline e um fluxo operacional completo para equipes de eventos. A interface está em português; código, migrations e nomes técnicos em inglês.
 
@@ -38,9 +38,8 @@ O sistema cobre:
 - regras de cálculo editáveis (garçons, descartáveis, bebidas, equipamentos);
 - checklist recalculável com ajustes manuais auditáveis;
 - PDF, CSV, impressão e link público somente leitura;
-- escolha entre modo online (sistema completo) e modo offline (checklists e layout);
-- modo offline automático, limitado a checklists salvas e layout, quando o serviço some;
-- aviso para reabrir o online assim que a conexão volta.
+- modo online automático quando o serviço responde, e modo offline automático quando some;
+- opção nas configurações para, ao reconectar, abrir o sistema online;
 
 Detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/OFFLINE.md](docs/OFFLINE.md).
 
@@ -66,7 +65,7 @@ Abra [http://localhost:8080](http://localhost:8080).
 
 | Campo | Valor |
 |-------|-------|
-| E-mail | `admin@buffet.local` |
+| ID | `1` |
 | Senha | `admin123` |
 
 O seed público traz um evento genérico, dois cardápios-modelo e dois serviços de exemplo — suficiente para explorar telas e fluxos, sem expor dados da operação real.

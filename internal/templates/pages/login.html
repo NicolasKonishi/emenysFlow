@@ -9,10 +9,9 @@
   {{if .Error}}<div class="alert danger" role="alert">{{.Error}}</div>{{end}}
   {{if .Flash}}<div class="alert info" role="status">{{.Flash}}</div>{{end}}
   <form action="/login" method="post" class="form-stack">
-    <label>E-mail<input type="email" name="email" value="admin@buffet.local" autocomplete="username" required autofocus></label>
-    <label>Senha<input type="password" name="password" value="admin123" autocomplete="current-password" required></label>
+    <label>ID<input type="text" name="id" inputmode="numeric" pattern="[0-9]+" autocomplete="username" required autofocus></label>
+    <label>Senha<input type="password" name="password" autocomplete="current-password" required></label>
     <button class="button primary full" type="submit">Entrar no sistema</button>
   </form>
-  <p class="demo-hint"><strong>Acesso de demonstração</strong><br>admin@buffet.local · admin123</p>
 </section>
 {{end}}

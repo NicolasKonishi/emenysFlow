@@ -22,6 +22,13 @@ func (a *App) layoutsPage(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.StandaloneLayouts = layouts
 	}
+	events, err := a.store.ListEvents(r.Context(), data.Query)
+	if err != nil && data.Error == "" {
+		data.Error = databaseErrorMessage(err)
+	} else if err == nil {
+		data.Events = events
+	}
+	a.attachKnownVenues(r, &data)
 	a.render(w, r, "layouts", data)
 }
 
@@ -34,6 +41,7 @@ func (a *App) layoutForm(w http.ResponseWriter, r *http.Request) {
 		WaiterCount:     6,
 	}
 	data.LayoutMode = "standalone"
+	a.attachKnownVenues(r, &data)
 	if r.PathValue("id") != "" {
 		id, err := pathID(r)
 		if err != nil {
@@ -87,15 +95,15 @@ func (a *App) saveStandaloneLayout(w http.ResponseWriter, r *http.Request, id in
 	}
 	layout := models.StandaloneFloorLayout{
 		ID:              id,
-		Name:            strings.TrimSpace(r.FormValue("name")),
 		Venue:           strings.TrimSpace(r.FormValue("venue")),
 		GuestCount:      parseIntDefault(r.FormValue("guest_count"), 0),
 		WaiterCount:     parseIntDefault(r.FormValue("waiter_count"), 0),
 		WaiterNamesJSON: strings.TrimSpace(r.FormValue("waiter_names_json")),
 		LayoutJSON:      r.FormValue("layout_json"),
 	}
-	if layout.Name == "" {
-		a.redirect(w, r, layoutFormRedirect(id, "danger", "Informe um nome para o layout."), http.StatusSeeOther)
+	layout.Name = layout.Venue
+	if layout.Venue == "" {
+		a.redirect(w, r, layoutFormRedirect(id, "danger", "Informe o local do evento."), http.StatusSeeOther)
 		return
 	}
 	if layout.WaiterNamesJSON == "" {

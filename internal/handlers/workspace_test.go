@@ -9,11 +9,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"buffetflow/internal/database"
+	"buffetflow/internal/models"
 	"buffetflow/internal/repositories"
 	"buffetflow/internal/services"
 )
@@ -33,8 +35,8 @@ func TestWorkspaceForUsesNavAndCookie(t *testing.T) {
 		t.Fatalf("layouts should stay online on a live request, got %q", got)
 	}
 	request.AddCookie(&http.Cookie{Name: workspaceCookie, Value: "offline"})
-	if got := workspaceFor(request, "layouts"); got != "offline" {
-		t.Fatalf("layouts in the offline workspace should keep the offline chrome, got %q", got)
+	if got := workspaceFor(request, "layouts"); got != "online" {
+		t.Fatalf("layouts should keep the online chrome even with an offline cookie, got %q", got)
 	}
 	if got := workspaceFor(request, "dashboard"); got != "online" {
 		t.Fatalf("full-system pages should leave the offline workspace, got %q", got)
@@ -99,7 +101,7 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 		t.Fatalf("health %d %s", response.StatusCode, health)
 	}
 
-	response, err = client.PostForm(server.URL+"/login", url.Values{"email": {"admin@buffet.local"}, "password": {"admin123"}})
+	response, err = client.PostForm(server.URL+"/login", url.Values{"id": {"1"}, "password": {"admin123"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,8 +111,7 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":        "Como você quer trabalhar agora?",
-		"/online":  "Próximos eventos",
+		"/":        "Próximos eventos",
 		"/offline": "Checklists e layout das festas",
 	}
 	for path, expected := range checks {
@@ -134,11 +135,11 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 	home, _ := io.ReadAll(response.Body)
 	response.Body.Close()
-	if !strings.Contains(string(home), "workspace-chooser") {
-		t.Fatal("home should render the workspace chooser")
+	if !strings.Contains(string(home), "workspace-online") {
+		t.Fatal("home should open the online workspace")
 	}
-	if !strings.Contains(string(home), "Entrar no modo offline") {
-		t.Fatal("chooser should offer the offline workspace")
+	if strings.Contains(string(home), "workspace-chooser") || strings.Contains(string(home), "Como você quer trabalhar agora?") {
+		t.Fatal("home should not ask which workspace to use")
 	}
 
 	response, err = client.Get(server.URL + "/online")
@@ -147,8 +148,11 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 	online, _ := io.ReadAll(response.Body)
 	response.Body.Close()
+	if response.Request.URL.Path != "/" {
+		t.Fatalf("/online should redirect home, got %q", response.Request.URL.Path)
+	}
 	if !strings.Contains(string(online), "workspace-online") {
-		t.Fatal("online dashboard should render the full online workspace")
+		t.Fatal("online alias should land on the online workspace")
 	}
 	if !strings.Contains(string(online), "href=\"/layouts\"") {
 		t.Fatal("online workspace should include layouts")
@@ -179,18 +183,104 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("GET /layouts status %d", response.StatusCode)
 	}
-	if !strings.Contains(string(layoutsBody), "workspace-offline") {
-		t.Fatal("layouts opened from the offline workspace should keep the offline interface")
+	if !strings.Contains(string(layoutsBody), "workspace-online") {
+		t.Fatal("layouts should use the online interface when the service is available")
 	}
-	if !strings.Contains(string(layoutsBody), "Modo offline") {
-		t.Fatal("offline layouts page should use the offline heading")
-	}
-	if strings.Contains(string(layoutsBody), `class="nav-list nav-online"`) && !strings.Contains(string(layoutsBody), "workspace-offline") {
-		t.Fatal("offline layouts should not present the full online navigation")
+	if strings.Contains(string(layoutsBody), "Modo offline") {
+		t.Fatal("live layouts page should not claim to be offline")
 	}
 	if strings.Contains(string(layoutsBody), "Não foi possível concluir a operação.") {
 		t.Fatal("live layouts page should not fail when listing standalone floor layouts")
 	}
+}
+
+func TestRoleAccessRestrictsRoutes(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "roles-test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := database.Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	store := repositories.New(db)
+	auth := services.NewAuthService(store)
+	if err := auth.EnsureDemoAdmin(ctx); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := services.HashPassword("corre1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corre := models.User{Name: "Corre", Email: "corre@buffet.local", Roles: []string{models.RoleCorre}}
+	if err := store.SaveUser(ctx, &corre, hash); err != nil {
+		t.Fatal(err)
+	}
+	agentHash, err := services.HashPassword("agent1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := models.User{Name: "Agent", Email: "agent@buffet.local", Roles: []string{models.RoleAgent}}
+	if err := store.SaveUser(ctx, &agent, agentHash); err != nil {
+		t.Fatal(err)
+	}
+
+	location := time.Local
+	app := New(store, auth, services.NewChecklistService(store), slog.New(slog.NewTextHandler(io.Discard, nil)), location)
+	server := httptest.NewServer(app.Routes())
+	defer server.Close()
+
+	login := func(id int64, password string) *http.Client {
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+		response, err := client.PostForm(server.URL+"/login", url.Values{"id": {strconv.FormatInt(id, 10)}, "password": {password}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("login %d status %d", id, response.StatusCode)
+		}
+		return client
+	}
+	assertStatus := func(client *http.Client, path string, want int) {
+		t.Helper()
+		response, err := client.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != want {
+			t.Fatalf("GET %s status %d want %d", path, response.StatusCode, want)
+		}
+	}
+
+	adminClient := login(1, "admin123")
+	assertStatus(adminClient, "/events/new", http.StatusOK)
+	assertStatus(adminClient, "/catalog", http.StatusOK)
+	assertStatus(adminClient, "/models", http.StatusOK)
+	assertStatus(adminClient, "/rules", http.StatusOK)
+	assertStatus(adminClient, "/settings", http.StatusOK)
+	assertStatus(adminClient, "/layouts", http.StatusOK)
+	assertStatus(adminClient, "/inventory", http.StatusOK)
+
+	correClient := login(corre.ID, "corre1234")
+	assertStatus(correClient, "/events", http.StatusOK)
+	assertStatus(correClient, "/inventory", http.StatusOK)
+	assertStatus(correClient, "/events/new", http.StatusForbidden)
+	assertStatus(correClient, "/layouts", http.StatusForbidden)
+	assertStatus(correClient, "/catalog", http.StatusForbidden)
+	assertStatus(correClient, "/settings", http.StatusForbidden)
+
+	agentClient := login(agent.ID, "agent1234")
+	assertStatus(agentClient, "/layouts", http.StatusOK)
+	assertStatus(agentClient, "/layouts/new", http.StatusOK)
+	assertStatus(agentClient, "/events", http.StatusOK)
+	assertStatus(agentClient, "/events/new", http.StatusForbidden)
+	assertStatus(agentClient, "/inventory", http.StatusForbidden)
+	assertStatus(agentClient, "/models", http.StatusForbidden)
+	assertStatus(agentClient, "/rules", http.StatusForbidden)
 }
 
 func hasWorkspaceCookie(jar http.CookieJar, rawURL, want string) bool {

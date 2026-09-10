@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"buffetflow/internal/models"
 )
 
 func kitchenBoxPathID(request *http.Request, name string) (int64, error) {
@@ -44,7 +46,7 @@ func (a *App) kitchenBoxPage(writer http.ResponseWriter, request *http.Request) 
 }
 
 func (a *App) kitchenBoxItemAdd(writer http.ResponseWriter, request *http.Request) {
-	if err := a.requireAdmin(request); err != nil {
+	if err := a.requirePermission(request, models.PermInventoryEdit); err != nil {
 		http.Error(writer, "Acesso restrito ao administrador.", http.StatusForbidden)
 		return
 	}
@@ -65,7 +67,7 @@ func (a *App) kitchenBoxItemAdd(writer http.ResponseWriter, request *http.Reques
 }
 
 func (a *App) kitchenBoxItemUpdate(writer http.ResponseWriter, request *http.Request) {
-	if err := a.requireAdmin(request); err != nil {
+	if err := a.requirePermission(request, models.PermInventoryEdit); err != nil {
 		http.Error(writer, "Acesso restrito ao administrador.", http.StatusForbidden)
 		return
 	}
@@ -82,7 +84,7 @@ func (a *App) kitchenBoxItemUpdate(writer http.ResponseWriter, request *http.Req
 }
 
 func (a *App) kitchenBoxItemRemove(writer http.ResponseWriter, request *http.Request) {
-	if err := a.requireAdmin(request); err != nil {
+	if err := a.requirePermission(request, models.PermInventoryEdit); err != nil {
 		http.Error(writer, "Acesso restrito ao administrador.", http.StatusForbidden)
 		return
 	}

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 func (a *App) loginPage(writer http.ResponseWriter, request *http.Request) {
@@ -20,9 +22,15 @@ func (a *App) login(writer http.ResponseWriter, request *http.Request) {
 		http.Error(writer, "Dados inválidos.", http.StatusBadRequest)
 		return
 	}
-	_, token, expires, err := a.auth.Login(request.Context(), request.FormValue("email"), request.FormValue("password"))
+	userID, err := strconv.ParseInt(strings.TrimSpace(request.FormValue("id")), 10, 64)
+	if err != nil || userID <= 0 {
+		data := PageData{Title: "Entrar", Error: "ID ou senha inválidos."}
+		a.render(writer, request, "login", data)
+		return
+	}
+	_, token, expires, err := a.auth.Login(request.Context(), userID, request.FormValue("password"))
 	if err != nil {
-		data := PageData{Title: "Entrar", Error: "E-mail ou senha inválidos."}
+		data := PageData{Title: "Entrar", Error: "ID ou senha inválidos."}
 		a.render(writer, request, "login", data)
 		return
 	}

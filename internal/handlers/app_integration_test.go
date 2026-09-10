@@ -52,7 +52,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
 
-	response, err := client.PostForm(server.URL+"/login", url.Values{"email": {"admin@buffet.local"}, "password": {"admin123"}})
+	response, err := client.PostForm(server.URL+"/login", url.Values{"id": {"1"}, "password": {"admin123"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +62,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":                    "Como você quer trabalhar agora?",
-		"/online":              "Próximos eventos",
+		"/":                    "Próximos eventos",
 		"/offline":             "Checklists e layout das festas",
 		"/api/health":          `"ok":true`,
 		"/events":              "Cliente Demonstração",
@@ -100,10 +99,10 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		"/settings":                      "Configurações",
 		"/settings/users/new":            "Novo usuário",
 		"/manifest.webmanifest":          "emenysFlow",
-		"/static/offline.html":           "Conexão restabelecida",
+		"/static/offline.html":           "Ao reconectar, abrir o sistema online",
 		"/static/js/offline.js":          "/api/health",
 		"/static/js/layout-division.js":  "suggestFloorWaiterDivision",
-		"/sw.js":                         `CACHE_VERSION = "v35"`,
+		"/sw.js":                         `CACHE_VERSION = "v51"`,
 		"/api/offline/bootstrap":         `"schema_version":2`,
 		"/static/css/app.css":            "--brand",
 	}
@@ -123,7 +122,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		if strings.Contains(string(body), "onsubmit=") {
 			t.Errorf("GET %s rendered an inline script handler", path)
 		}
-		if path == "/online" {
+		if path == "/" {
 			policy := response.Header.Get("Content-Security-Policy")
 			if !strings.Contains(policy, "script-src 'self'") || strings.Contains(policy, "unpkg.com") {
 				t.Errorf("unexpected Content-Security-Policy: %q", policy)
@@ -141,11 +140,20 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		if path == "/events/new" && (!strings.Contains(string(body), `name="has_cake"`) || !strings.Contains(string(body), `<strong>Tem bolo</strong>`) || !strings.Contains(string(body), `name="cake_notes"`) || !strings.Contains(string(body), `class="cake-flavor-field" data-cake-flavor-field hidden`)) {
 			t.Error("new event form is missing the optional cake and flavor controls")
 		}
+		if path == "/events/new" && (!strings.Contains(string(body), `name="event_date"`) || !strings.Contains(string(body), `name="starts_time"`) || strings.Contains(string(body), `name="waiter_override"`) || strings.Contains(string(body), `name="ends_at"`) || strings.Contains(string(body), "manual-menu-adjustments") || strings.Contains(string(body), "Recipiente padrão")) {
+			t.Error("new event form should be simpler: optional client/venue, date+start time, no staff overrides, containers, or manual menu adjustments")
+		}
 		if path == "/inventory/new" && (!strings.Contains(string(body), `data-code-prefix="CUB"`) || !strings.Contains(string(body), `data-inventory-code-mode="create"`) || !strings.Contains(string(body), `name="internal_code"`)) {
 			t.Error("new inventory item form is missing automatic internal code metadata")
 		}
-		if path == "/events/1" && (!strings.Contains(string(body), `/checklist/groups/material/status`) || !strings.Contains(string(body), `data-group-check`)) {
-			t.Error("event checklist is missing the whole-group check control")
+		if path == "/events/1" && (!strings.Contains(string(body), `data-simple-checklist`) || !strings.Contains(string(body), "?tab=separation") || !strings.Contains(string(body), "Conferir tudo") || !strings.Contains(string(body), "Deixar para depois") || strings.Contains(string(body), "Link público") || strings.Contains(string(body), `href="/events/1/menu"`) || strings.Contains(string(body), `href="/events/1/edit"`) || strings.Contains(string(body), `href="/events/1/return"`) || strings.Contains(string(body), "Retorno pós-evento") || strings.Contains(string(body), "recalculation-summary") || strings.Contains(string(body), `class="alert success"`) || strings.Contains(string(body), "Abrir operação")) {
+			t.Error("event checklist should mix the operation list without public link, menu, edit, return, or the old summary panels")
+		}
+		if path == "/settings/users/new" && (!strings.Contains(string(body), `name="roles"`) || !strings.Contains(string(body), `value="admin"`) || !strings.Contains(string(body), `value="corre"`) || !strings.Contains(string(body), `value="agent"`)) {
+			t.Error("user form should let admins assign multiple roles")
+		}
+		if path == "/settings" && !strings.Contains(string(body), `data-open-online-on-reconnect`) {
+			t.Error("settings should include the reconnect-to-online option")
 		}
 	}
 
@@ -205,6 +213,31 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		if status != "separated" || separated != required {
 			t.Fatalf("material item %d status=%q separated=%.0f required=%.0f", itemID, status, separated, required)
 		}
+	}
+
+	var requiredQuantity float64
+	if err := store.DB().QueryRowContext(ctx, "SELECT required_quantity FROM checklist_items WHERE id=?", materialItemIDs[0]).Scan(&requiredQuantity); err != nil {
+		t.Fatal(err)
+	}
+	staleRequest, err := http.NewRequest(http.MethodPost, server.URL+fmt.Sprintf("/events/1/operation/items/%d/quantity", materialItemIDs[0]), strings.NewReader(url.Values{
+		"stage":    {"separation"},
+		"quantity": {fmt.Sprintf("%g", requiredQuantity)},
+		"version":  {"1"},
+	}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	staleRequest.Header.Set("Accept", "application/json")
+	staleRequest.Header.Set("X-BuffetFlow-Client", "pwa")
+	staleResponse, err := client.Do(staleRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleBody, _ := io.ReadAll(staleResponse.Body)
+	staleResponse.Body.Close()
+	if staleResponse.StatusCode != http.StatusOK {
+		t.Fatalf("conferir with stale version status %d body %s", staleResponse.StatusCode, staleBody)
 	}
 
 	var syncItemID int64
@@ -281,7 +314,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		t.Fatalf("create event from menu template final status %d", response.StatusCode)
 	}
 	var createdEventID int64
-	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM events WHERE name=?", "Festa criada pelo cardápio-base").Scan(&createdEventID); err != nil {
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM events WHERE client_name=?", "Cliente do modelo").Scan(&createdEventID); err != nil {
 		t.Fatal(err)
 	}
 	createdEvent, err := store.GetEvent(ctx, createdEventID)
@@ -404,7 +437,7 @@ func TestMainPagesRenderAfterLogin(t *testing.T) {
 		t.Fatalf("create event from advanced model final status %d", response.StatusCode)
 	}
 	var advancedEventID int64
-	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM events WHERE name='Evento com snapshot avançado'").Scan(&advancedEventID); err != nil {
+	if err := store.DB().QueryRowContext(ctx, "SELECT id FROM events WHERE client_name='Cliente avançado'").Scan(&advancedEventID); err != nil {
 		t.Fatal(err)
 	}
 	var customSnapshotCount, serviceSnapshotCount, checklistServiceCount, checklistCookBoxCount int

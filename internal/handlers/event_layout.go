@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"buffetflow/internal/models"
 	"buffetflow/internal/repositories"
@@ -34,8 +35,9 @@ func (a *App) eventLayoutPage(w http.ResponseWriter, r *http.Request) {
 	if data.StaffSummary.Waiters == 0 && event.GuestCount > 0 {
 		data.StaffSummary.Waiters = (event.GuestCount + 17) / 18
 	}
-	if err != nil {
-		data.Error = databaseErrorMessage(err)
+	a.attachKnownVenues(r, &data)
+	if strings.TrimSpace(event.Venue) == "" {
+		data.Error = "Informe o local do evento antes de montar o layout."
 	}
 	a.render(w, r, "layout_form", data)
 }

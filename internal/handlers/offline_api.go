@@ -92,6 +92,8 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 		quantity := numberValue(payload["quantity"])
 		notes := stringValue(payload["notes"])
 		result.Version, err = a.store.SaveOperationalQuantity(r.Context(), eventID, request.EntityID, stage, quantity, notes, user.ID, request.BaseVersion)
+	case "update_checklist_status":
+		err = a.store.UpdateChecklistItemStatus(r.Context(), request.EntityID, stringValue(payload["status"]), user.ID)
 	case "mark_shortage":
 		shortage := models.ChecklistShortage{EventID: eventID, ChecklistItemID: request.EntityID, MissingQuantity: numberValue(payload["missing_quantity"]), Reason: stringValue(payload["reason"]), ResolutionType: stringValue(payload["resolution_type"]), ResponsibleName: stringValue(payload["responsible_name"]), SupplierName: stringValue(payload["supplier_name"]), Notes: stringValue(payload["notes"])}
 		if shortage.Reason == "" {

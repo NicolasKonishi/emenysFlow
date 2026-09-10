@@ -26,7 +26,7 @@ func (a *App) inventory(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (a *App) inventoryForm(writer http.ResponseWriter, request *http.Request) {
-	if err := a.requireAdmin(request); err != nil {
+	if err := a.requirePermission(request, models.PermInventoryEdit); err != nil {
 		http.Error(writer, "Acesso restrito ao administrador.", http.StatusForbidden)
 		return
 	}
@@ -138,7 +138,7 @@ func (a *App) inventoryUpdate(writer http.ResponseWriter, request *http.Request)
 	a.saveInventory(writer, request, id)
 }
 func (a *App) saveInventory(writer http.ResponseWriter, request *http.Request, id int64) {
-	if err := a.requireAdmin(request); err != nil {
+	if err := a.requirePermission(request, models.PermInventoryEdit); err != nil {
 		http.Error(writer, "Acesso restrito ao administrador.", http.StatusForbidden)
 		return
 	}
@@ -173,7 +173,7 @@ func (a *App) saveInventory(writer http.ResponseWriter, request *http.Request, i
 }
 
 func (a *App) inventoryToggle(writer http.ResponseWriter, request *http.Request) {
-	if err := a.requireAdmin(request); err != nil {
+	if err := a.requirePermission(request, models.PermInventoryEdit); err != nil {
 		http.Error(writer, "Acesso restrito.", http.StatusForbidden)
 		return
 	}
@@ -212,7 +212,7 @@ func (a *App) inventoryMovements(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) inventoryAdjust(w http.ResponseWriter, r *http.Request) {
-	if err := a.requireAdmin(r); err != nil {
+	if err := a.requirePermission(r, models.PermInventoryEdit); err != nil {
 		http.Error(w, "Acesso restrito.", 403)
 		return
 	}

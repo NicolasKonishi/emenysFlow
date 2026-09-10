@@ -146,13 +146,29 @@ func (s *Store) UpdateChecklistItemStatus(ctx context.Context, itemID int64, sta
 		return fmt.Errorf("invalid status")
 	}
 	now := nowString()
-	_, err := s.db.ExecContext(ctx, `UPDATE checklist_items SET status=?,
-		separated_quantity=CASE WHEN ?='separated' THEN required_quantity WHEN ?='pending' THEN 0 ELSE separated_quantity END,
-		separated_by=CASE WHEN ?='separated' THEN ? WHEN ?='pending' THEN NULL ELSE separated_by END,
-		separated_at=CASE WHEN ?='separated' THEN ? WHEN ?='pending' THEN NULL ELSE separated_at END,
-		row_version=row_version+1,updated_at=? WHERE id=?`,
-		status, status, status, status, nullableUserID(userID), status, status, now, status, now, itemID)
-	return err
+	return withTx(ctx, s.db, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE checklist_items SET status=?,
+			separated_quantity=CASE WHEN ?='separated' THEN required_quantity WHEN ? IN ('pending','not_applicable') THEN 0 ELSE separated_quantity END,
+			separated_by=CASE WHEN ?='separated' THEN ? WHEN ? IN ('pending','not_applicable') THEN NULL ELSE separated_by END,
+			separated_at=CASE WHEN ?='separated' THEN ? WHEN ? IN ('pending','not_applicable') THEN NULL ELSE separated_at END,
+			loaded_quantity=CASE WHEN ? IN ('pending','not_applicable') THEN 0 ELSE loaded_quantity END,
+			loading_decision=CASE WHEN ? IN ('pending','not_applicable') THEN NULL ELSE loading_decision END,
+			loading_missing_quantity=CASE WHEN ? IN ('pending','not_applicable') THEN 0 ELSE loading_missing_quantity END,
+			updated_by=?,row_version=row_version+1,updated_at=? WHERE id=?`,
+			status, status, status, status, nullableUserID(userID), status, status, now, status,
+			status, status, status, nullableUserID(userID), now, itemID)
+		if err != nil {
+			return err
+		}
+		switch status {
+		case "separated":
+			return closeChecklistItemShortages(ctx, tx, itemID, "resolved", "separation", "Item recebido e separado.", userID, now)
+		case "not_applicable":
+			return closeChecklistItemShortages(ctx, tx, itemID, "cancelled", "", "Definido na checklist como não terá.", userID, now)
+		default:
+			return nil
+		}
+	})
 }
 
 func (s *Store) UpdateChecklistItemsStatus(ctx context.Context, eventID int64, itemIDs []int64, status string, userID int64) error {
@@ -212,6 +228,11 @@ func checklistProgress(items []models.ChecklistItem) models.ChecklistProgress {
 		separated, loaded := 0.0, 0.0
 		for _, item := range items {
 			if item.RequiredQuantity <= 0 {
+				continue
+			}
+			if item.Status == "not_applicable" {
+				separated++
+				loaded++
 				continue
 			}
 			separated += minFloat(1, item.SeparatedQuantity/item.RequiredQuantity)

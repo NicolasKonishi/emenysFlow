@@ -55,7 +55,7 @@ func (a *App) userForm(w http.ResponseWriter, r *http.Request) {
 	}
 	data := a.baseData(r, "Novo usuário", "settings")
 	data.FormAction = "/settings/users"
-	user := models.User{Role: "operational", Active: true}
+	user := models.User{Roles: []string{models.RoleCorre}, Active: true}
 	if r.PathValue("id") != "" {
 		id, err := pathID(r)
 		if err != nil {
@@ -89,7 +89,13 @@ func (a *App) saveUser(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	_ = r.ParseForm()
-	user := models.User{ID: id, Name: strings.TrimSpace(r.FormValue("name")), Email: strings.TrimSpace(r.FormValue("email")), Role: r.FormValue("role"), Active: true}
+	roles := make([]string, 0, len(r.Form["roles"]))
+	for _, slug := range r.Form["roles"] {
+		if slug = strings.TrimSpace(slug); slug != "" {
+			roles = append(roles, slug)
+		}
+	}
+	user := models.User{ID: id, Name: strings.TrimSpace(r.FormValue("name")), Email: strings.TrimSpace(r.FormValue("email")), Roles: roles, Active: true}
 	password := r.FormValue("password")
 	var hash string
 	var err error

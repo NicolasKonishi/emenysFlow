@@ -200,8 +200,20 @@ func (s *Store) SaveOperationalQuantity(ctx context.Context, eventID, itemID int
 		if err := tx.QueryRowContext(ctx, `SELECT item.required_quantity,item.separated_quantity,item.loaded_quantity,item.row_version FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE item.id=? AND checklist.event_id=? AND item.active=1`, itemID, eventID).Scan(&required, &separated, &loaded, &version); err != nil {
 			return err
 		}
+		complete := quantity+0.0001 >= required
 		if expectedVersion > 0 && expectedVersion != version {
-			return fmt.Errorf("version conflict")
+			if stage == "separation" && complete && separated+0.0001 >= required {
+				newVersion = version
+				return nil
+			}
+			if stage == "loading" && complete && loaded+0.0001 >= required {
+				newVersion = version
+				return nil
+			}
+			if !complete {
+				newVersion = version
+				return fmt.Errorf("version conflict")
+			}
 		}
 		now := nowString()
 		before := fmt.Sprintf(`{"separated_quantity":%g,"loaded_quantity":%g,"version":%d}`, separated, loaded, version)
@@ -214,6 +226,11 @@ func (s *Store) SaveOperationalQuantity(ctx context.Context, eventID, itemID int
 				return err
 			}
 			separated = quantity
+			if complete {
+				if err := closeChecklistItemShortages(ctx, tx, itemID, "resolved", "separation", "Item recebido e separado.", userID, now); err != nil {
+					return err
+				}
+			}
 		} else {
 			if separated+0.0001 < required {
 				return fmt.Errorf("item is not ready for loading")
@@ -233,6 +250,28 @@ func (s *Store) SaveOperationalQuantity(ctx context.Context, eventID, itemID int
 		return err
 	})
 	return newVersion, err
+}
+
+func closeChecklistItemShortages(ctx context.Context, tx *sql.Tx, itemID int64, status, destination, notes string, userID int64, now string) error {
+	if status != "resolved" && status != "cancelled" {
+		return fmt.Errorf("invalid shortage closing status")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO checklist_shortage_history(shortage_id,previous_status,new_status,notes,changed_by,created_at)
+		SELECT id,status,?,?,?,? FROM checklist_shortages WHERE checklist_item_id=? AND status NOT IN ('resolved','cancelled')`,
+		status, notes, nullableUserID(userID), now, itemID); err != nil {
+		return err
+	}
+	resolutionDestination := any(nil)
+	resolvedBy := any(nil)
+	resolvedAt := any(nil)
+	if status == "resolved" {
+		resolutionDestination = destination
+		resolvedBy = nullableUserID(userID)
+		resolvedAt = now
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE checklist_shortages SET status=?,resolution_destination=?,resolved_by=?,resolved_at=?,row_version=row_version+1,updated_at=?
+		WHERE checklist_item_id=? AND status NOT IN ('resolved','cancelled')`, status, resolutionDestination, resolvedBy, resolvedAt, now, itemID)
+	return err
 }
 
 func (s *Store) AddManualChecklistItem(ctx context.Context, eventID int64, item models.ChecklistItem, userID int64) (int64, error) {

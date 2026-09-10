@@ -4,7 +4,7 @@
     <div class="page-brand">
       <span class="brand-mark large">{{icon "mark"}}</span>
       <div>
-        <a class="back-link" href="/events/{{.Event.ID}}/operation">{{icon "back"}} Voltar à checklist</a>
+        <a class="back-link" href="/events/{{.Event.ID}}">{{icon "back"}} Voltar à checklist</a>
         <span class="eyebrow">{{.Event.ClientName}} · {{.Event.GuestCount}} pessoas</span>
         <h1>{{if eq .Operation.Stage "separating"}}Separação do estoque{{else if eq .Operation.Stage "checking"}}Conferência dos itens{{else if eq .Operation.Stage "loading"}}Carregamento{{else}}Evento em andamento{{end}}</h1>
         <p>{{.Event.Name}} · {{.Event.Venue}}</p>

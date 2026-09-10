@@ -60,24 +60,24 @@ Todas as relações críticas usam foreign keys. Eventos, itens, regras e cadast
 
 ## 5. Fluxo das telas
 
-O sistema tem duas áreas. Depois do login você escolhe online ou offline. Se o serviço sumir, o modo offline abre sozinho; quando volta, o aparelho pergunta se abre o sistema completo.
+O sistema tem duas áreas. Depois do login o aparelho verifica a conexão: se o serviço responde, abre o modo online; se não, o modo offline. Um watcher continua essa verificação. Nas configurações dá para ligar a volta automática ao online.
 
 ```text
 Login
-  └─ Escolher área
-      ├─ Modo online (sistema completo)
+  └─ Verificação automática
+      ├─ Serviço no ar → Modo online (sistema completo)
       │   ├─ Visão geral
       │   ├─ Eventos
       │   ├─ Estoque
       │   ├─ Layouts
       │   ├─ Modelos, cardápios, regras e configurações
       │   └─ Checklists e operação
-      └─ Modo offline (limitado)
+      └─ Sem serviço → Modo offline (limitado)
           ├─ Checklists dos eventos salvos neste aparelho
           └─ Organizador de layout
 ```
 
-Quando o serviço volta, um aviso pede confirmação para abrir o sistema completo. No celular, o modo online destaca a criação de evento. O modo offline destaca o layout.
+Quando o serviço volta e a opção de reconectar está ligada, o sistema completo abre sozinho. No celular, o modo online destaca a criação de evento. O modo offline destaca o layout.
 
 ## 6. O que permanece configurável
 

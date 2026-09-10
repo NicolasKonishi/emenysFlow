@@ -17,7 +17,23 @@ func (s *Store) EnsureDemoAdmin(ctx context.Context, passwordHash string) error 
 	if err != nil {
 		return fmt.Errorf("ensure demo admin: %w", err)
 	}
-	return nil
+	return s.EnsureUserHasRoleByEmail(ctx, "admin@buffet.local", models.RoleAdmin)
+}
+
+func (s *Store) UserByID(ctx context.Context, id int64) (models.User, error) {
+	var user models.User
+	var active int
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, email, password_hash, access_role, row_version, active
+		FROM users WHERE id = ?`, id).Scan(
+		&user.ID, &user.Name, &user.Email, &user.Password, &user.Role, &user.RowVersion, &active,
+	)
+	if err != nil {
+		return user, err
+	}
+	user.AccessRole = user.Role
+	user.Active = active == 1
+	err = s.attachUserRoles(ctx, &user)
+	return user, err
 }
 
 func (s *Store) UserByEmail(ctx context.Context, email string) (models.User, error) {
@@ -27,8 +43,12 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (models.User, err
 		FROM users WHERE email = ? COLLATE NOCASE`, email).Scan(
 		&user.ID, &user.Name, &user.Email, &user.Password, &user.Role, &user.RowVersion, &active,
 	)
+	if err != nil {
+		return user, err
+	}
 	user.AccessRole = user.Role
 	user.Active = active == 1
+	err = s.attachUserRoles(ctx, &user)
 	return user, err
 }
 
@@ -40,8 +60,12 @@ func (s *Store) UserBySession(ctx context.Context, tokenHash string) (models.Use
 		WHERE s.token_hash = ? AND s.expires_at > ?`, tokenHash, nowString()).Scan(
 		&user.ID, &user.Name, &user.Email, &user.Role, &user.RowVersion, &active,
 	)
+	if err != nil {
+		return user, err
+	}
 	user.AccessRole = user.Role
 	user.Active = active == 1
+	err = s.attachUserRoles(ctx, &user)
 	return user, err
 }
 

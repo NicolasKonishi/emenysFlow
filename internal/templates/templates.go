@@ -31,6 +31,18 @@ func NewRenderer() *Renderer {
 			}
 			return value.Local().Format("2006-01-02T15:04")
 		},
+		"dateInput": func(value time.Time) string {
+			if value.IsZero() {
+				return ""
+			}
+			return value.Local().Format("2006-01-02")
+		},
+		"timeInput": func(value time.Time) string {
+			if value.IsZero() {
+				return ""
+			}
+			return value.Local().Format("15:04")
+		},
 		"number": func(value float64) string {
 			if math.Abs(value-math.Round(value)) < 0.0001 {
 				return fmt.Sprintf("%.0f", value)
@@ -46,6 +58,7 @@ func NewRenderer() *Renderer {
 		"checklistDone":           checklistDone,
 		"observationLines":        observationLines,
 		"cakeSection":             isCakeSection,
+		"omitEventMenuItem":       omitEventMenuItem,
 		"inputNumber":             func(value float64) string { return fmt.Sprintf("%g", value) },
 		"money":                   func(cents int64) string { return fmt.Sprintf("R$ %.2f", float64(cents)/100) },
 		"div":                     func(value int64, divisor float64) float64 { return float64(value) / divisor },
@@ -57,6 +70,9 @@ func NewRenderer() *Renderer {
 		"itemColor":               itemColor,
 		"icon":                    iconSVG,
 		"eq":                      func(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) },
+		"hasRole":                 func(user models.User, slug string) bool { return user.HasRole(slug) },
+		"can":                     func(user models.User, permission string) bool { return user.Can(permission) },
+		"roleLabels":              func(user models.User) string { return user.RoleLabels() },
 		"operationQty": func(item models.ChecklistItem, stage string) float64 {
 			switch stage {
 			case "separating":
@@ -79,6 +95,17 @@ func NewRenderer() *Renderer {
 
 func isCakeSection(value string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(value)), "bolo")
+}
+
+func omitEventMenuItem(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "metriê", "metrie", "maître", "maitre",
+		"garçom", "garçons", "cozinheira", "cozinheiras",
+		"copeira", "copeiras", "líder", "líderes", "colíder", "colíderes":
+		return true
+	default:
+		return false
+	}
 }
 
 func observationLines(value string) []string {
@@ -181,7 +208,7 @@ func statusLabel(value string) string {
 		"loading": "Carregamento", "in_progress": "Em andamento", "returning": "Retorno", "post_event_check": "Conferência pós-evento",
 		"completed": "Finalizado", "cancelled": "Cancelado", "pending": "Pendente", "separated": "Separado", "checked": "Conferido",
 		"loaded": "Carregado", "at_event": "No evento", "returned": "Retornado", "damaged": "Danificado", "lost": "Perdido",
-		"not_applicable": "Não se aplica",
+		"not_applicable": "Não terá",
 		"purchasing":     "Em compra", "renting": "Em aluguel", "resolved": "Solucionado",
 		"in": "Entrada", "out": "Saída", "adjustment": "Ajuste", "damage": "Dano", "loss": "Perda",
 	}

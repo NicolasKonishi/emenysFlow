@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -92,6 +93,8 @@ type PageData struct {
 	FloorLayout              models.EventFloorLayout
 	StandaloneLayout         models.StandaloneFloorLayout
 	StandaloneLayouts        []models.StandaloneFloorLayout
+	KnownVenues              []string
+	KnownVenuesJSON          string
 	LayoutMode               string
 	OperationalSettings      []models.OperationalSetting
 	Recalculation            models.RecalculationSummary
@@ -120,8 +123,8 @@ func (a *App) Routes() http.Handler {
 	root.HandleFunc("GET /api/health", a.health)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("GET /", a.workspaceChooser)
-	protected.HandleFunc("GET /online", a.onlineDashboard)
+	protected.HandleFunc("GET /", a.onlineDashboard)
+	protected.HandleFunc("GET /online", a.redirectOnlineHome)
 	protected.HandleFunc("GET /offline", a.offlineHub)
 	protected.HandleFunc("POST /workspace", a.setWorkspace)
 	protected.HandleFunc("POST /logout", a.logout)
@@ -271,6 +274,24 @@ func (a *App) Routes() http.Handler {
 	return a.securityHeaders(root)
 }
 
+func (a *App) attachKnownVenues(request *http.Request, data *PageData) {
+	venues, err := a.store.ListKnownVenues(request.Context())
+	if err != nil {
+		data.KnownVenuesJSON = "[]"
+		return
+	}
+	if venues == nil {
+		venues = []string{}
+	}
+	data.KnownVenues = venues
+	encoded, err := json.Marshal(venues)
+	if err != nil {
+		data.KnownVenuesJSON = "[]"
+		return
+	}
+	data.KnownVenuesJSON = string(encoded)
+}
+
 func (a *App) baseData(request *http.Request, title, nav string) PageData {
 	data := PageData{Title: title, CurrentNav: nav, Flash: request.URL.Query().Get("message"), FlashType: request.URL.Query().Get("type")}
 	if data.FlashType == "" {
@@ -306,16 +327,12 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 			a.redirect(writer, request, "/login", http.StatusSeeOther)
 			return
 		}
+		if permission := permissionFor(request.Method, request.URL.Path); permission != "" && !user.Can(permission) {
+			http.Error(writer, "Acesso restrito para o seu perfil.", http.StatusForbidden)
+			return
+		}
 		next.ServeHTTP(writer, request.WithContext(context.WithValue(request.Context(), userContextKey, user)))
 	})
-}
-
-func (a *App) requireAdmin(request *http.Request) error {
-	user, ok := request.Context().Value(userContextKey).(models.User)
-	if !ok || (user.Role != "admin" && user.Role != "organizer") {
-		return fmt.Errorf("administrator access required")
-	}
-	return nil
 }
 
 func (a *App) securityHeaders(next http.Handler) http.Handler {

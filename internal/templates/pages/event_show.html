@@ -1,48 +1,130 @@
 {{define "content"}}
-<div class="page-wrap event-detail">
+<div class="page-wrap event-detail operational-hub" data-offline-event-id="{{.Event.ID}}">
   <header class="event-hero">
-    <div><a class="back-link" href="/events">{{icon "back"}} Todos os eventos</a><div class="hero-title"><span class="badge {{statusClass .Event.Status}}">{{statusLabel .Event.Status}}</span><h1>BUFFET — {{.Event.ClientName}} — {{.Event.GuestCount}} pessoas</h1></div><p>{{.Event.Name}} · {{.Event.Venue}} · {{dateTime .Event.StartsAt}}{{if .Event.KitchenCookID.Valid}} · Cozinheira: {{.Event.KitchenCookName}}{{end}}{{if .Event.HasCake}} · Bolo: {{if .Event.CakeNotes}}{{.Event.CakeNotes}}{{else}}sabor a definir{{end}}{{else}} · Sem bolo{{end}}</p></div>
-    <div class="hero-actions"><a class="button secondary" href="/events/{{.Event.ID}}/layout">Layout do salão</a><a class="button secondary" href="/events/{{.Event.ID}}/menu">Cardápio</a><a class="button secondary" href="/events/{{.Event.ID}}/decorations">Decoração</a><a class="button secondary" href="/events/{{.Event.ID}}/edit">Editar</a><a class="button secondary" href="/events/{{.Event.ID}}/pdf">Visualizar PDF</a><a class="button secondary" href="/events/{{.Event.ID}}/export.csv" hx-boost="false">Planilha</a><button class="button secondary" type="button" data-print>Imprimir</button><form action="/events/{{.Event.ID}}/share" method="post"><button class="button secondary" type="submit">Link público</button></form><form action="/events/{{.Event.ID}}/generate" method="post"><button class="button secondary" type="submit">{{icon "refresh"}} Recalcular</button></form></div>
+    <div>
+      {{if eq .Workspace "offline"}}<a class="back-link" href="/offline">{{icon "back"}} Checklists salvas</a>{{else}}<a class="back-link" href="/events">{{icon "back"}} Todos os eventos</a>{{end}}
+      <div class="hero-title"><span class="badge {{statusClass .Event.Status}}">{{statusLabel .Event.Status}}</span><h1>BUFFET — {{.Event.ClientName}} — {{.Event.GuestCount}} pessoas</h1></div>
+      <p>{{.Event.Name}} · {{.Event.Venue}} · {{dateTime .Event.StartsAt}}{{if .Event.KitchenCookID.Valid}} · Cozinheira: {{.Event.KitchenCookName}}{{end}}{{if .Event.HasCake}} · Bolo: {{if .Event.CakeNotes}}{{.Event.CakeNotes}}{{else}}sabor a definir{{end}}{{else}} · Sem bolo{{end}}</p>
+      {{if can .User "checklist"}}<p class="hero-hint">Na separação, marque cada item como Separado, Aguardando (quando será comprado ou alugado) ou Não terá. Arraste para a direita para separar e para a esquerda para marcar que não terá.</p>{{end}}
+    </div>
+    <div class="hero-actions">
+      {{if can .User "layouts"}}<a class="button secondary" href="/events/{{.Event.ID}}/layout">{{icon "layouts"}} Layout do salão</a>{{end}}
+      <a class="button secondary" href="/events/{{.Event.ID}}/pdf">Visualizar PDF</a>
+      <a class="button secondary" href="/events/{{.Event.ID}}/export.csv" hx-boost="false">Planilha</a>
+      <button class="button secondary" type="button" data-print>Imprimir</button>
+      {{if can .User "checklist"}}<button class="button secondary" type="button" data-sync-now>{{icon "refresh"}} Sincronizar agora</button>{{end}}
+      {{if can .User "events.edit"}}<form action="/events/{{.Event.ID}}/generate" method="post"><button class="button secondary" type="submit">{{icon "refresh"}} Recalcular</button></form>{{end}}
+    </div>
   </header>
-  {{if .Flash}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
+  {{if and .Flash (not (eq .FlashType "success"))}}<div class="alert {{.FlashType}}" role="status">{{.Flash}}</div>{{end}}{{if .Error}}<div class="alert danger">{{.Error}}</div>{{end}}
 
-  <section class="checklist-overview panel">
-    <div class="progress-ring" style="--progress:{{.Checklist.Progress.Percentage}}"><strong>{{.Checklist.Progress.Percentage}}%</strong><small>concluído</small></div>
-    <div class="overview-copy"><span class="eyebrow">Progresso da operação</span><h2>{{.Checklist.Progress.Completed}} de {{.Checklist.Progress.Total}} itens prontos</h2><div class="progress-line large"><span style="width:{{.Checklist.Progress.Percentage}}%"></span></div><div class="progress-legend"><span><i class="dot success"></i>{{.Checklist.Progress.Completed}} concluídos</span><span><i class="dot neutral"></i>{{.Checklist.Progress.Pending}} pendentes</span><span><i class="dot danger"></i>{{.Checklist.Progress.Missing}} com falta</span></div></div>
-    <div class="reservation-action"><form action="/events/{{.Event.ID}}/reserve" method="post"><button class="button primary full" type="submit">Reservar estoque</button></form>{{if gt .Checklist.Progress.Missing 0}}<form action="/events/{{.Event.ID}}/reserve" method="post" data-confirm="Há itens faltantes. Deseja reservar e manter as faltas como pendência?"><input type="hidden" name="confirm_shortage" value="1"><button class="button ghost small full" type="submit">Reservar mesmo assim</button></form>{{end}}</div>
+  {{if and (can .User "checklist") .Event.Notes}}<aside class="panel checklist-notes"><span class="eyebrow">Observações da checklist</span><ul>{{range observationLines .Event.Notes}}<li>{{.}}</li>{{end}}</ul></aside>{{end}}
+
+  {{if can .User "checklist"}}
+  <section class="simple-check-progress panel">
+    <div><span>Separação</span><strong>{{.Checklist.Progress.SeparationPercentage}}%</strong><div class="progress-line"><span style="width:{{.Checklist.Progress.SeparationPercentage}}%"></span></div></div>
+    <div><span>Carregamento</span><strong>{{.Checklist.Progress.LoadingPercentage}}%</strong><div class="progress-line"><span style="width:{{.Checklist.Progress.LoadingPercentage}}%"></span></div></div>
   </section>
 
-  {{if .Event.Notes}}<aside class="panel checklist-notes"><span class="eyebrow">Observações da checklist</span><ul>{{range observationLines .Event.Notes}}<li>{{.}}</li>{{end}}</ul></aside>{{end}}
+  <nav class="operation-tabs" aria-label="Áreas da operação">
+    <a href="?tab=separation" {{if eq .ActiveTab "separation"}}aria-current="page"{{end}}>Separação</a>
+    <a href="?tab=loading" {{if eq .ActiveTab "loading"}}aria-current="page"{{end}}>Carregamento</a>
+    <a href="?tab=missing" {{if eq .ActiveTab "missing"}}aria-current="page"{{end}}>Sem estoque <span>{{len .Shortages}}</span></a>
+  </nav>
 
-  {{if gt .Checklist.Progress.Missing 0}}<div class="shortage-banner">{{icon "warning"}}<div><strong>{{.Checklist.Progress.Missing}} itens precisam de ação</strong><p>Comprar, alugar, substituir ou manter como pendência antes do carregamento.</p></div><a href="#checklist">Revisar faltas</a></div>{{end}}
-
-  {{if .Recalculation.ID}}<details class="panel recalculation-summary"><summary>Último recálculo · versão {{.Recalculation.PreviousVersion}} para {{.Recalculation.NewVersion}} · {{dateTime .Recalculation.CreatedAt}}</summary><div><span class="badge success">{{icon "plus"}} {{.Recalculation.Added}} adicionados</span><span class="badge neutral">{{icon "refresh"}} {{.Recalculation.QuantitiesUpdated}} quantidades alteradas</span><span class="badge danger">− {{.Recalculation.Removed}} removidos</span><span class="badge warning">{{.Recalculation.Shortages}} faltas</span></div></details>{{end}}
-
-  <section class="operation-actions panel"><div><span class="eyebrow">Fluxo operacional</span><h2>Separação, carregamento e faltas</h2><p>As três áreas registram quantidades parciais, responsáveis e horários. Sem conexão, só esta operação e o layout continuam disponíveis.</p></div><div><a class="button primary" href="/events/{{.Event.ID}}/operation">Abrir operação</a><a class="button secondary" href="/events/{{.Event.ID}}/return">Retorno pós-evento</a></div></section>
-
-  <section id="checklist" class="checklist-section">
-    <div class="section-toolbar"><div><span class="eyebrow">Checklist gerada</span><h2>Material, decoração e equipe</h2></div><span class="version-label">Versão {{.Checklist.Version}} · {{dateTime .Checklist.GeneratedAt}}</span></div>
+  {{if eq .ActiveTab "missing"}}
     {{range .Groups}}
-    <details class="category-group panel" open>
-      <summary><button class="round-check {{if .Completed}}checked{{end}}" type="submit" form="check-group-{{$.Event.ID}}-{{.Key}}" data-group-check aria-label="{{if .Completed}}Marcar todo o grupo {{.Category}} como pendente{{else}}Marcar todo o grupo {{.Category}} como separado{{end}}">{{if .Completed}}{{icon "check"}}{{end}}</button><span>{{.Category}}</span><small>{{len .Items}} itens</small>{{icon "chevron"}}</summary>
-      <form id="check-group-{{$.Event.ID}}-{{.Key}}" class="group-check-form" action="/events/{{$.Event.ID}}/checklist/groups/{{.Key}}/status" method="post" data-preserve-scroll><input type="hidden" name="status" value="{{if .Completed}}pending{{else}}separated{{end}}"></form>
-      <div class="checklist-items">
+    <section class="checklist-group{{if eq .Key "decoration"}} is-decoration{{end}}" data-checklist-group data-group-key="{{.Key}}">
+      <div class="checklist-group-heading"><h2>{{.Category}}</h2><small>{{len .Items}} itens</small></div>
+      <section class="simple-check-list" data-simple-checklist>
         {{range .Items}}
-        <article class="check-item {{if positive .MissingQuantity}}has-shortage{{end}}">
-          <div class="check-toggle">
-            <form action="/checklist/items/{{.ID}}/status" method="post" data-preserve-scroll><input type="hidden" name="event_id" value="{{$.Event.ID}}"><input type="hidden" name="status" value="{{if checklistDone .Status}}pending{{else}}separated{{end}}"><button class="round-check {{if checklistDone .Status}}checked{{end}}" aria-label="{{if checklistDone .Status}}Marcar pendente{{else}}Marcar separado{{end}}">{{if checklistDone .Status}}{{icon "check"}}{{end}}</button></form>
+        <article class="simple-check-card is-missing">
+          <div class="simple-check-front">
+            <div class="simple-check-copy">
+              <h3>{{.Name}}</h3>
+              <p>
+                <strong>{{number .RequiredQuantity}}</strong>
+                <span>{{.Unit}}</span>
+                {{if itemColor .Notes}}<span class="simple-check-color">{{itemColor .Notes}}</span>{{end}}
+              </p>
+            </div>
+            {{if .Shortage}}<form action="/events/{{$.Event.ID}}/operation/shortages/{{.Shortage.ID}}/status" method="post" data-offline-form data-operation-type="resolve_shortage" data-entity-type="shortage">
+              <input type="hidden" name="status" value="cancelled">
+              <button class="button secondary small" type="submit">Devolver à lista</button>
+            </form>{{end}}
           </div>
-          <div class="check-main"><div class="check-title"><strong>{{.Name}}</strong><span class="badge {{statusClass .Status}}">{{statusLabel .Status}}</span><span class="kind-tag">{{kindLabel .ItemKind}}</span>{{if .ManualOverride}}<span class="kind-tag edited">Ajustado</span>{{end}}</div><p>{{if .LocationSnapshot}}{{.LocationSnapshot}}{{else}}Localização não informada{{end}}</p><small>{{.CategoryName}} · {{.CalculationOrigin}}</small></div>
-          <div class="quantity-stack"><strong>{{number .RequiredQuantity}}</strong><span>{{.Unit}}</span>{{if .ManualOverride}}<small>calculado: {{number .CalculatedQuantity}}</small>{{end}}</div>
-          <div class="availability"><span>Disponível <strong>{{number .AvailableQuantity}}</strong></span>{{if positive .ReservedElsewhereQuantity}}<small>{{number .ReservedElsewhereQuantity}} reservados em outro evento</small>{{end}}{{if positive .MissingQuantity}}<b>Faltam {{number .MissingQuantity}}</b>{{else}}<small class="success-text">Quantidade coberta</small>{{end}}</div>
-          <details class="item-menu"><summary aria-label="Mais ações">•••</summary><div class="popover"><form action="/checklist/items/{{.ID}}/override" method="post"><input type="hidden" name="event_id" value="{{$.Event.ID}}"><label>Nova quantidade<input type="number" min="0" step="1" name="quantity" value="{{inputNumber .RequiredQuantity}}" required></label><label>Motivo<input name="reason" value="{{.OverrideReason}}" required placeholder="Ex.: equipe confirmou 20"></label><button class="button primary small" type="submit">Aplicar neste evento</button></form></div></details>
         </article>
         {{end}}
+      </section>
+    </section>
+    {{else}}
+    <div class="empty-state panel">{{icon "checklists"}}<strong>Nada marcado como sem estoque.</strong><p>Arraste um item para a esquerda se ele não estiver no estoque.</p></div>
+    {{end}}
+  {{else}}
+    {{range .Groups}}
+    {{$decoration := eq .Key "decoration"}}
+    <details class="checklist-group{{if $decoration}} is-decoration{{end}}" open data-checklist-group data-group-key="{{.Key}}">
+      <summary class="checklist-group-heading"><h2>{{.Category}}</h2><small>{{len .Items}} itens</small>{{icon "chevron"}}</summary>
+      <div class="checklist-group-toolbar">
+        {{if can $.User "checklist"}}<button class="button secondary small" type="button" data-group-check-all>Separar tudo</button>
+        <button class="button ghost small" type="button" data-group-defer>Fechar grupo</button>{{end}}
       </div>
+      <section class="simple-check-list" data-simple-checklist data-event-id="{{$.Event.ID}}" data-stage="{{if eq $.ActiveTab "loading"}}loading{{else}}separation{{end}}">
+        {{range .Items}}
+        {{$done := false}}{{$notHave := false}}{{$waiting := false}}{{if eq $.ActiveTab "loading"}}{{if or (eq .LoadingDecision "complete") (not (positive (sub .RequiredQuantity .LoadedQuantity)))}}{{$done = true}}{{end}}{{else}}{{if eq .Status "not_applicable"}}{{$notHave = true}}{{else if not (positive (sub .RequiredQuantity .SeparatedQuantity))}}{{$done = true}}{{else if .CanAwait}}{{$waiting = true}}{{end}}{{end}}
+        <article class="simple-check-card{{if $done}} is-done{{else if $notHave}} is-not-have{{else if $waiting}} is-waiting{{end}}"
+          data-simple-item
+          data-item-id="{{.ID}}"
+          data-version="{{.RowVersion}}"
+          data-required="{{inputNumber .RequiredQuantity}}"
+          data-stage="{{if eq $.ActiveTab "loading"}}loading{{else}}separation{{end}}"
+          data-mode="quantity"
+          data-state="{{if $done}}done{{else if $notHave}}not-have{{else if $waiting}}waiting{{else}}pending{{end}}"
+          data-done-label="{{if eq $.ActiveTab "loading"}}Conferido{{else}}Separado{{end}}"
+          data-missing-label="Sem estoque"
+          data-waiting-label="Aguardando"
+          data-not-have-label="Não terá"
+          data-check-url="/events/{{$.Event.ID}}/operation/items/{{.ID}}/quantity"
+          data-missing-url="/events/{{$.Event.ID}}/operation/items/{{.ID}}/shortage"
+          data-status-url="/checklist/items/{{.ID}}/status">
+          <div class="simple-check-reveal is-left">{{icon "warning"}} {{if eq $.ActiveTab "loading"}}Sem estoque{{else}}Não terá{{end}}</div>
+          <div class="simple-check-reveal is-right">{{icon "check"}} {{if eq $.ActiveTab "loading"}}Conferir{{else}}Separado{{end}}</div>
+          <div class="simple-check-front">
+            <div class="simple-check-copy">
+              <h3>{{.Name}}</h3>
+              <p>
+                <strong>{{number .RequiredQuantity}}</strong>
+                <span>{{.Unit}}</span>
+                {{if itemColor .Notes}}<span class="simple-check-color">{{itemColor .Notes}}</span>{{end}}
+              </p>
+            </div>
+            <div class="simple-check-actions{{if and (eq $.ActiveTab "separation") .CanAwait}} has-three{{end}}">
+              {{if eq $.ActiveTab "loading"}}
+              <button class="simple-check-btn is-missing" type="button" data-simple-missing>{{icon "warning"}} Sem estoque</button>
+              <button class="simple-check-btn is-check" type="button" data-simple-check>{{icon "check"}} Conferir</button>
+              {{else}}
+              <button class="simple-check-btn is-not-have" type="button" data-simple-not-have>{{icon "warning"}} Não terá</button>
+              {{if .CanAwait}}<button class="simple-check-btn is-waiting" type="button" data-simple-waiting>Aguardando</button>{{end}}
+              <button class="simple-check-btn is-check" type="button" data-simple-check>{{icon "check"}} Separado</button>
+              {{end}}
+            </div>
+            <p class="simple-check-status" data-simple-status>{{if $done}}{{if eq $.ActiveTab "loading"}}Conferido{{else}}Separado{{end}}{{else if $notHave}}Não terá{{else if $waiting}}Aguardando{{end}}</p>
+          </div>
+        </article>
+        {{end}}
+      </section>
     </details>
-    {{else}}<div class="empty-state panel"><strong>A checklist ainda não possui itens.</strong><p>Verifique se há regras ativas e recalcule o evento.</p></div>{{end}}
+    {{else}}
+    <div class="empty-state panel">{{icon "checklists"}}<strong>{{if eq .ActiveTab "loading"}}Nenhum item liberado para carregamento.{{else}}Nenhum item nesta lista.{{end}}</strong><p>{{if eq .ActiveTab "loading"}}Confira a separação primeiro.{{else}}Recalcule o evento se a checklist estiver vazia.{{end}}</p></div>
+    {{end}}
+  {{end}}
+  {{else}}
+  <section class="panel">
+    <p>Este evento já está cadastrado.{{if can .User "layouts"}} Monte o salão pelo layout.{{end}}</p>
+    {{if can .User "layouts"}}<a class="button primary" href="/events/{{.Event.ID}}/layout">{{icon "layouts"}} Abrir layout do salão</a>{{end}}
   </section>
+  {{end}}
 
-  <section class="danger-zone panel"><div><strong>Ações do evento</strong><p>Duplicar cria uma cópia para a semana seguinte. Cancelar libera reservas existentes.</p></div><div><form action="/events/{{.Event.ID}}/duplicate" method="post"><button class="button secondary">Duplicar evento</button></form>{{if not (eq .Event.Status "cancelled")}}<form action="/events/{{.Event.ID}}/cancel" method="post" data-confirm="Cancelar este evento e liberar todas as reservas?"><button class="button danger">Cancelar evento</button></form>{{end}}</div></section>
+  {{if and (can .User "events.edit") (not (eq .Workspace "offline"))}}<section class="danger-zone panel"><div><strong>Ações do evento</strong><p>Duplicar cria uma cópia para a semana seguinte. Cancelar libera reservas existentes.</p></div><div><form action="/events/{{.Event.ID}}/duplicate" method="post"><button class="button secondary">Duplicar evento</button></form>{{if not (eq .Event.Status "cancelled")}}<form action="/events/{{.Event.ID}}/cancel" method="post" data-confirm="Cancelar este evento e liberar todas as reservas?"><button class="button danger">Cancelar evento</button></form>{{end}}</div></section>{{end}}
 </div>
 {{end}}

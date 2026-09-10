@@ -9,7 +9,7 @@ func TestIconSVGKnownNames(t *testing.T) {
 	names := []string{
 		"mark", "home", "events", "layouts", "models", "catalog", "inventory",
 		"rules", "settings", "checklists", "plus", "search", "arrow", "back",
-		"logout", "close", "warning", "check", "return", "refresh", "pin",
+		"logout", "close", "warning", "check", "return", "refresh", "pin", "undo", "redo", "copy", "trash",
 	}
 	for _, name := range names {
 		markup := string(iconSVG(name))

@@ -13,9 +13,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=3">
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=3">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png?v=3">
-  <link rel="stylesheet" href="/static/css/app.css?v=58">
+  <link rel="stylesheet" href="/static/css/app.css?v=71">
   <script defer src="/static/js/icons.js?v=2"></script>
-  <script defer src="/static/js/offline.js?v=15"></script>
+  <script defer src="/static/js/offline.js?v=19"></script>
 </head>
 <body class="offline-shell workspace-offline" data-workspace="offline">
   <header class="offline-topbar">
@@ -28,16 +28,6 @@
       <a href="/layouts">Layouts</a>
     </nav>
   </header>
-  <aside class="reconnect-banner" data-reconnect-banner hidden>
-    <div>
-      <strong>Conexão restabelecida</strong>
-      <p>O emenysFlow está online de novo. Deseja abrir o sistema completo?</p>
-    </div>
-    <div class="reconnect-actions">
-      <button type="button" class="button primary" data-open-online>Abrir modo online</button>
-      <button type="button" class="button ghost" data-stay-offline>Continuar offline</button>
-    </div>
-  </aside>
   <main class="offline-page">
     <header class="page-header">
       <div class="page-brand">
@@ -45,25 +35,25 @@
         <div>
           <span class="eyebrow">Modo offline</span>
         <h1>Checklists e layout neste aparelho</h1>
-        <p>Use as checklists e os layouts salvos neste aparelho. Quando o serviço voltar, você escolhe se abre o sistema completo.</p>
+        <p>Use as checklists e os layouts salvos neste aparelho. A conexão é verificada sozinha.</p>
       </div>
-    </div>
-    <div class="page-header-actions">
-      <button type="button" class="button ghost" data-open-online>Abrir sistema completo</button>
     </div>
   </header>
-    <section class="panel sync-preference" data-sync-preference>
+    <section class="panel sync-preference" data-sync-preference id="conexao">
       <div>
-        <span class="eyebrow">Sincronização</span>
-        <h2>Enviar alterações para o online</h2>
-        <p>Desligado, tudo fica só neste aparelho.</p>
+        <span class="eyebrow">Configurações</span>
+        <h2>Conexão e sincronização</h2>
+        <p>Ligado, o sistema completo abre quando a conexão voltar.</p>
       </div>
-      <label class="sync-switch"><input type="checkbox" data-sync-enabled><span>Sincronizar com o online</span></label>
-      <p class="sync-preference-status" data-sync-preference-status>A sincronização automática está desligada.</p>
+      <div class="sync-preference-actions">
+        <label class="sync-switch"><input type="checkbox" data-open-online-on-reconnect checked><span>Ao reconectar, abrir o sistema online</span></label>
+        <label class="sync-switch"><input type="checkbox" data-sync-enabled><span>Sincronizar alterações automaticamente</span></label>
+      </div>
+      <p class="sync-preference-status" data-sync-preference-status>O aparelho abre o sistema online ao reconhecer a conexão.</p>
     </section>
     <section class="offline-event-grid" data-offline-home><p>Carregando dados locais…</p></section>
   </main>
-  <nav class="mobile-nav mobile-nav-offline workspace-chooser-nav" aria-label="Navegação móvel">
+  <nav class="mobile-nav mobile-nav-offline" aria-label="Navegação móvel">
     <a href="/offline" aria-current="page"><span class="nav-icon" data-icon="checklists"></span>Checklists</a>
     <a class="mobile-create" href="/layouts/new" aria-label="Novo layout"><span class="nav-icon" data-icon="plus"></span></a>
     <a href="/layouts"><span class="nav-icon" data-icon="layouts"></span>Layouts</a>

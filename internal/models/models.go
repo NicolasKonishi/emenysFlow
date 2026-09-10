@@ -11,6 +11,7 @@ type User struct {
 	Email      string
 	Role       string
 	AccessRole string
+	Roles      []string
 	RowVersion int
 	Active     bool
 	Password   string
@@ -222,6 +223,15 @@ type ChecklistItem struct {
 	Active                    bool
 	RowVersion                int
 	Shortage                  *ChecklistShortage
+}
+
+// CanAwait reports whether an item can legitimately stay pending while it is
+// being bought or rented for the event.
+func (item ChecklistItem) CanAwait() bool {
+	if item.ItemKind == "consumable" || item.ItemKind == "rented" {
+		return true
+	}
+	return item.Shortage != nil && (item.Shortage.ResolutionType == "purchase" || item.Shortage.ResolutionType == "rental")
 }
 
 type ChecklistProgress struct {

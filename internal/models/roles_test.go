@@ -8,6 +8,7 @@ func TestUserCanCombinesRoles(t *testing.T) {
 	admin := User{Roles: []string{RoleAdmin}}
 	corre := User{Roles: []string{RoleCorre}}
 	agent := User{Roles: []string{RoleAgent}}
+	creator := User{Roles: []string{RoleEventCreator}}
 	both := User{Roles: []string{RoleCorre, RoleAgent}}
 
 	if !admin.Can(PermEventEdit) || !admin.Can(PermLayouts) || !admin.Can(PermInventoryEdit) {
@@ -24,6 +25,9 @@ func TestUserCanCombinesRoles(t *testing.T) {
 	}
 	if !agent.Can(PermLayouts) || !agent.Can(PermEventView) {
 		t.Fatal("agent should edit layouts and view events")
+	}
+	if !creator.Can(PermEventEdit) || !creator.Can(PermEventView) || creator.Can(PermChecklist) || creator.Can(PermInventoryView) {
+		t.Fatal("event creator should manage event information only")
 	}
 	if !both.Can(PermLayouts) || !both.Can(PermChecklist) || both.Can(PermEventEdit) {
 		t.Fatal("combined corre+agent should keep each role's access without becoming admin")

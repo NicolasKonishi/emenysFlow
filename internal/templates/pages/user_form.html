@@ -6,6 +6,7 @@
         <div class="option-grid event-options">
           <label class="toggle-card"><input type="checkbox" name="roles" value="admin" {{if $u.HasRole "admin"}}checked{{end}}><span class="toggle"></span><span><strong>Administrador</strong><small>Eventos, cardápios, modelos, regras e o restante do sistema</small></span></label>
           <label class="toggle-card"><input type="checkbox" name="roles" value="corre" {{if $u.HasRole "corre"}}checked{{end}}><span class="toggle"></span><span><strong>Corre</strong><small>Checklist, visualizar eventos e editar estoque</small></span></label>
+          <label class="toggle-card"><input type="checkbox" name="roles" value="event_creator" {{if $u.HasRole "event_creator"}}checked{{end}}><span class="toggle"></span><span><strong>Criador de eventos</strong><small>Cria e edita eventos, agenda e anotações; sem acesso a estoque e configurações</small></span></label>
           <label class="toggle-card"><input type="checkbox" name="roles" value="agent" {{if $u.HasRole "agent"}}checked{{end}}><span class="toggle"></span><span><strong>Agent</strong><small>Layouts do zero ou a partir de eventos</small></span></label>
         </div>
       </div>

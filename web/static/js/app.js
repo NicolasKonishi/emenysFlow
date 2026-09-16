@@ -1,16 +1,77 @@
+function systemLayer(className, content) {
+  const layer = document.createElement("div");
+  layer.className = `system-layer ${className || ""}`;
+  layer.innerHTML = content;
+  document.body.appendChild(layer);
+  return layer;
+}
+
+function showSystemAlert(message, tone = "info") {
+  let stack = document.querySelector(".system-toast-stack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "system-toast-stack";
+    stack.setAttribute("aria-live", "polite");
+    document.body.appendChild(stack);
+  }
+  const toast = document.createElement("div");
+  toast.className = `system-toast ${tone}`;
+  toast.innerHTML = `<span></span><button type="button" aria-label="Fechar">×</button>`;
+  toast.querySelector("span").textContent = message;
+  const dismiss = () => toast.remove();
+  toast.querySelector("button").addEventListener("click", dismiss);
+  stack.appendChild(toast);
+  window.setTimeout(dismiss, 5500);
+}
+
+function systemConfirm(message, options = {}) {
+  return new Promise((resolve) => {
+    const layer = systemLayer("system-confirm", `<section class="system-dialog" role="dialog" aria-modal="true" aria-labelledby="system-confirm-title"><h2 id="system-confirm-title">Confirmar ação</h2><p></p><div class="system-dialog-actions"><button class="button secondary small" type="button" data-system-cancel>Voltar</button><button class="button primary small" type="button" data-system-confirm>${options.confirmLabel || "Confirmar"}</button></div></section>`);
+    layer.querySelector("p").textContent = message;
+    const finish = (answer) => { layer.remove(); resolve(answer); };
+    layer.querySelector("[data-system-cancel]").addEventListener("click", () => finish(false));
+    layer.querySelector("[data-system-confirm]").addEventListener("click", () => finish(true));
+    layer.addEventListener("click", (event) => { if (event.target === layer) finish(false); });
+    layer.querySelector("[data-system-cancel]").focus();
+  });
+}
+
+function showImagePreview(src, alt) {
+  const layer = systemLayer("image-preview-layer", `<section class="system-dialog image-preview-dialog" role="dialog" aria-modal="true" aria-label="Pré-visualização da referência"><img><footer><span></span><button class="button secondary small" type="button">Voltar</button></footer></section>`);
+  const image = layer.querySelector("img");
+  image.src = src;
+  image.alt = alt || "Referência";
+  layer.querySelector("footer span").textContent = alt || "Referência";
+  const close = () => layer.remove();
+  layer.querySelector("button").addEventListener("click", close);
+  layer.addEventListener("click", (event) => { if (event.target === layer) close(); });
+  layer.querySelector("button").focus();
+}
+
+window.emenysAlert = showSystemAlert;
+window.emenysConfirm = systemConfirm;
+
 document.addEventListener("submit", (event) => {
-  const form = event.target.closest("form[data-confirm]");
-  if (form && !window.confirm(form.dataset.confirm)) event.preventDefault();
+  const form = event.target.closest("form");
+  const message = event.submitter?.dataset.confirm || form?.dataset.confirm;
+  if (form && message && form.dataset.systemConfirmed !== "true") {
+    event.preventDefault();
+    systemConfirm(message, { confirmLabel: event.submitter?.dataset.confirmLabel || "Confirmar" }).then((confirmed) => {
+      if (!confirmed) return;
+      form.dataset.systemConfirmed = "true";
+      form.requestSubmit(event.submitter || undefined);
+      delete form.dataset.systemConfirmed;
+    });
+  }
 
   const preservedForm = event.target.closest("form[data-preserve-scroll]");
   if (preservedForm && !event.defaultPrevented) {
     sessionStorage.setItem("buffetflow-preserved-scroll", JSON.stringify({ path: window.location.pathname, top: window.scrollY }));
     window.setTimeout(() => sessionStorage.removeItem("buffetflow-preserved-scroll"), 2000);
   }
-});
+}, true);
 
 document.addEventListener("click",(event)=>{
-  if(event.target.closest("[data-print]"))window.print();
   if(event.target.closest("[data-group-check], [data-group-check-all], [data-group-defer]"))event.stopPropagation();
   const removeChoice = event.target.closest("[data-remove-model-choice]");
   if (removeChoice) {
@@ -27,6 +88,59 @@ document.addEventListener("click",(event)=>{
     row.remove();
   }
 });
+
+function initializeChecklistSpreadsheetDownload(root = document) {
+  root.querySelectorAll("[data-download-checklist-csv]").forEach((link) => {
+    if (link.dataset.initialized === "true") return;
+    link.dataset.initialized = "true";
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      const download = document.createElement("a");
+      download.href = link.href;
+      download.download = link.download;
+      download.hidden = true;
+      document.body.appendChild(download);
+      download.click();
+      download.remove();
+    });
+  });
+}
+
+function bindFilePreview(input) {
+  if (!input || input.dataset.filePreviewInitialized === "true") return;
+  input.dataset.filePreviewInitialized = "true";
+  const container = input.closest(".decoration-reference-upload, .note-photo-upload, [data-photo-upload]") || input.parentElement;
+  const status = container?.querySelector("[data-file-picker-status]");
+  const previews = container?.querySelector("[data-file-previews]");
+  input.addEventListener("change", () => {
+      const files = Array.from(input.files || []);
+      if (status) status.textContent = files.length ? `${files.length} foto${files.length === 1 ? "" : "s"} selecionada${files.length === 1 ? "" : "s"}` : "JPG, PNG ou WEBP · até 8 MB";
+      if (!previews) return;
+      previews.replaceChildren();
+      previews.hidden = files.length === 0;
+      files.slice(0, 4).forEach((file) => {
+        const image = document.createElement("img");
+        image.alt = `Prévia de ${file.name}`;
+        image.src = URL.createObjectURL(file);
+        image.addEventListener("load", () => URL.revokeObjectURL(image.src), { once: true });
+        previews.appendChild(image);
+      });
+      if (files.length > 4) {
+        const more = document.createElement("span");
+        more.textContent = `+${files.length - 4} foto${files.length - 4 === 1 ? "" : "s"}`;
+        previews.appendChild(more);
+      }
+  });
+}
+
+function initializePhotoInputs(root = document) {
+  root.querySelectorAll("[data-photo-upload] input[type='file'], input[data-file-input]").forEach(bindFilePreview);
+  root.querySelectorAll("[data-image-preview]").forEach((button) => {
+    if (button.dataset.imagePreviewInitialized === "true") return;
+    button.dataset.imagePreviewInitialized = "true";
+    button.addEventListener("click", () => showImagePreview(button.dataset.previewSrc, button.dataset.previewAlt));
+  });
+}
 
 function restorePreservedScroll() {
   const raw = sessionStorage.getItem("buffetflow-preserved-scroll");
@@ -463,7 +577,7 @@ function initializeSimpleChecklist(root = document) {
         const groupName = group?.querySelector(".checklist-group-heading h2")?.textContent.trim() || "esta classe";
         const actionLabel = /separar/i.test(checkAll.textContent) ? "Separar" : "Conferir";
         const itemLabel = pending.length === 1 ? "item" : "itens";
-        if (!window.confirm(`${actionLabel} ${pending.length} ${itemLabel} de ${groupName}?`)) return;
+        if (!await systemConfirm(`${actionLabel} ${pending.length} ${itemLabel} de ${groupName}?`, { confirmLabel: actionLabel })) return;
         checkAll.disabled = true;
         try {
           sessionStorage.removeItem(laterKey());
@@ -522,13 +636,9 @@ function initializeEventDecorationToggle(root = document) {
     const form = toggle.closest("form");
     const section = form?.querySelector("[data-event-decoration-section]");
     if (!section) return;
-    const hasSavedData = section.querySelector('input[name="decoration_theme"]')?.value
-      || section.querySelector('textarea[name="decoration_description"]')?.value
-      || section.querySelector('input[name="decoration_ids"]:checked');
-    toggle.addEventListener("change", () => {
-      if (!toggle.checked && hasSavedData && !window.confirm("Desativar a decoração? Os dados preenchidos serão preservados, mas itens e reservas deixarão de ser gerados.")) {
-        toggle.checked = true;
-      }
+    const hasSavedData = () => section.querySelector('input[type="checkbox"]:checked');
+    toggle.addEventListener("change", async () => {
+      if (!toggle.checked && hasSavedData() && !await systemConfirm("Desativar a decoração? As peças escolhidas serão preservadas, mas não entrarão na checklist.")) toggle.checked = true;
       section.hidden = !toggle.checked;
     });
   });
@@ -691,6 +801,48 @@ function initializeEventVenueName(root = document) {
   });
 }
 
+function initializeCalendarDatePicker(root = document) {
+  const selectionPanel = root.querySelector("[data-calendar-selection-panel]");
+  const templateFor = (date) => Array.from(root.querySelectorAll("[data-calendar-selection-template]")).find((template) => template.dataset.calendarSelectionTemplate === date);
+  const selectDate = (day, updateHistory = true) => {
+    if (!selectionPanel) return;
+    const template = templateFor(day.dataset.calendarDate);
+    if (!template) return;
+
+    selectionPanel.replaceChildren(template.content.cloneNode(true));
+    root.querySelectorAll("[data-calendar-date]").forEach((candidate) => {
+      const selected = candidate === day;
+      candidate.classList.toggle("is-selected", selected);
+      candidate.setAttribute("aria-pressed", String(selected));
+    });
+
+    if (updateHistory) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("month", day.dataset.calendarMonth);
+      url.searchParams.set("date", day.dataset.calendarDate);
+      window.history.replaceState({}, "", url);
+    }
+  };
+
+  root.querySelectorAll("[data-calendar-date]").forEach((day) => {
+    if (day.dataset.calendarBound === "true") return;
+    day.dataset.calendarBound = "true";
+    day.addEventListener("click", (event) => {
+      event.preventDefault();
+      selectDate(day);
+    });
+    day.addEventListener("dblclick", async (event) => {
+      event.preventDefault();
+      const target = day.dataset.createUrl;
+      if (!target) return;
+      const date = day.dataset.calendarDate.split("-").reverse().join("/");
+      if (await systemConfirm(`Deseja criar um evento para ${date}?`, { confirmLabel: "Criar evento" })) window.location.assign(target);
+    });
+
+    if (day.classList.contains("is-selected")) selectDate(day, false);
+  });
+}
+
 function watchMenuModelPreview(root = document) {
   const preview = root.querySelector?.("#menu-model-preview") || document.getElementById("menu-model-preview");
   if (!preview || preview.dataset.customMenuObserver === "true") return;
@@ -703,6 +855,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updatePrimaryNavigation();
   initializeMenuTemplateSelectors();
   initializeMenuModelFallback();
+  initializeChecklistSpreadsheetDownload();
   initializePDFSharing();
   initializeMobileLoading();
 	initializeMenuCategoryRules();
@@ -714,6 +867,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	watchMenuModelPreview();
 	initializeInventoryInternalCode();
 	initializeEventVenueName();
+	initializeCalendarDatePicker();
+	initializePhotoInputs();
 });
 
 document.addEventListener("htmx:beforeRequest", (event) => {
@@ -729,6 +884,7 @@ function refreshAfterSwap(root = document) {
   updatePrimaryNavigation();
   initializeMenuTemplateSelectors(root);
   initializeMenuModelFallback(root);
+  initializeChecklistSpreadsheetDownload(root);
   initializePDFSharing(root);
   initializeMobileLoading(root);
   initializeMenuCategoryRules(root);
@@ -740,6 +896,8 @@ function refreshAfterSwap(root = document) {
   watchMenuModelPreview(document);
   initializeInventoryInternalCode(root);
   initializeEventVenueName(root);
+  initializeCalendarDatePicker(root);
+  initializePhotoInputs(root);
 }
 
 document.addEventListener("htmx:afterSwap", (event) => {

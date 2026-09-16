@@ -229,6 +229,9 @@ func (s *ChecklistService) generate(ctx context.Context, eventID int64) (models.
 	if err := s.store.SyncDecorationRentalChecklist(ctx, eventID); err != nil {
 		return models.Checklist{}, fmt.Errorf("sync decoration rentals: %w", err)
 	}
+	if err := s.store.SyncDecorationCompositionChecklist(ctx, eventID); err != nil {
+		return models.Checklist{}, fmt.Errorf("sync decoration composition items: %w", err)
+	}
 	if err := s.store.EnsureCalculatedShortages(ctx, eventID); err != nil {
 		return models.Checklist{}, fmt.Errorf("sync calculated shortages: %w", err)
 	}

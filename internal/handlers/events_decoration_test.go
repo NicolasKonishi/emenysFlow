@@ -73,18 +73,25 @@ func TestGroupChecklistUsesOperationalSectionsAndCompletion(t *testing.T) {
 	if len(groups) != 4 {
 		t.Fatalf("group count got %d, want 4: %+v", len(groups), groups)
 	}
-	wantKeys := []string{"food", "disposable", "material", "decoration"}
-	wantCounts := []int{1, 1, 2, 1}
+	wantKeys := []string{"material", "disposable", "food", "decoration"}
+	wantCounts := []int{2, 1, 1, 1}
 	for index, key := range wantKeys {
 		if groups[index].Key != key || len(groups[index].Items) != wantCounts[index] {
 			t.Errorf("group %d got key=%q items=%d, want key=%q items=%d", index, groups[index].Key, len(groups[index].Items), key, wantCounts[index])
 		}
 	}
-	if groups[2].Items[0].Name != "Prato" || groups[2].Items[1].Name != "Jarra" {
-		t.Errorf("material should keep team equipment and skip staff, got %#v", groups[2].Items)
+	if groups[0].Items[0].Name != "Prato" || groups[0].Items[1].Name != "Jarra" {
+		t.Errorf("material should keep team equipment and skip staff, got %#v", groups[0].Items)
 	}
 	if !groups[0].Completed || !groups[1].Completed || !groups[2].Completed || groups[3].Completed {
-		t.Errorf("unexpected completed states: food=%v disposable=%v material=%v decoration=%v", groups[0].Completed, groups[1].Completed, groups[2].Completed, groups[3].Completed)
+		t.Errorf("unexpected completed states: material=%v disposable=%v food=%v decoration=%v", groups[0].Completed, groups[1].Completed, groups[2].Completed, groups[3].Completed)
+	}
+}
+
+func TestGroupChecklistKeepsInitialDecorationDraftInDecorationCard(t *testing.T) {
+	groups := groupChecklist([]models.ChecklistItem{{Name: "Tapete da cerimônia", SourceKey: "decoration-composition:42"}})
+	if len(groups) != 1 || groups[0].Key != "decoration" || len(groups[0].Items) != 1 || groups[0].Items[0].Name != "Tapete da cerimônia" {
+		t.Fatalf("item da configuração inicial não entrou no card de decoração: %#v", groups)
 	}
 }
 

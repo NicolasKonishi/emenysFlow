@@ -20,6 +20,8 @@ func permissionFor(method, path string) string {
 	switch {
 	case path == "/", path == "/online", path == "/offline", path == "/workspace", path == "/logout":
 		return ""
+	case path == "/calendar":
+		return models.PermEventView
 	case strings.HasPrefix(path, "/api/"):
 		return ""
 	case strings.HasPrefix(path, "/settings"):
@@ -28,6 +30,8 @@ func permissionFor(method, path string) string {
 		return models.PermAdmin
 	case strings.HasPrefix(path, "/decorations"), strings.HasPrefix(path, "/photos/"):
 		return models.PermAdmin
+	case strings.HasPrefix(path, "/event-notes/photos/"):
+		return models.PermEventView
 	case strings.HasPrefix(path, "/layouts"):
 		return models.PermLayouts
 	case strings.HasPrefix(path, "/inventory"):
@@ -51,10 +55,20 @@ func eventPermission(method, path string) string {
 	if strings.Contains(path, "/operation") || strings.Contains(path, "/return") || strings.HasSuffix(path, "/finalize") || strings.Contains(path, "/checklist") {
 		return models.PermChecklist
 	}
+	if strings.Contains(path, "/decorations") {
+		return models.PermEventEdit
+	}
 	if method == http.MethodGet && (path == "/events" || isEventShowPath(path) || isEventExportPath(path)) {
 		return models.PermEventView
 	}
-	return models.PermEventEdit
+	// Event creators can manage the event briefing, date and its technical
+	// notes. Inventory reservations, operational checklists and menu/catalog
+	// mutations remain administrator work.
+	if path == "/events" || path == "/events/new" || path == "/events/menu-model-preview" || isEventShowPath(path) ||
+		strings.HasSuffix(path, "/edit") || strings.Contains(path, "/notes") {
+		return models.PermEventEdit
+	}
+	return models.PermAdmin
 }
 
 func isEventShowPath(path string) bool {

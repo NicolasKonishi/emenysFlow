@@ -14,12 +14,12 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v=3">
   <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512.png?v=3">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png?v=3">
-  <link rel="stylesheet" href="/static/css/app.css?v=71">
+  <link rel="stylesheet" href="/static/css/app.css?v=76">
   <script defer src="/static/js/icons.js?v=2"></script>
-  <script defer src="/static/js/app.js?v=30"></script>
+  <script defer src="/static/js/app.js?v=33"></script>
   <script defer src="/static/js/layout-division.js?v=1"></script>
   <script defer src="/static/js/layout-editor.js?v=43"></script>
-  <script defer src="/static/js/offline.js?v=19"></script>
+  <script defer src="/static/js/offline.js?v=21"></script>
 </head>
 <body {{if .User.ID}}class="app-shell{{if eq .Workspace "offline"}} workspace-offline{{else}} workspace-online{{end}}" data-workspace="{{if eq .Workspace "offline"}}offline{{else}}online{{end}}"{{else if .Public}}class="public-shell"{{else}}class="auth-shell"{{end}}>
   {{if .User.ID}}
@@ -57,7 +57,6 @@
     <span class="connection-state" data-connection-state>Verificando conexão…</span>
     <span data-pending-count>0 operações pendentes</span>
     <span data-last-sync>Ainda não sincronizado</span>
-    <button type="button" class="button ghost small" data-sync-now>Sincronizar agora</button>
   </section>
   <aside class="sync-conflicts" data-conflict-panel hidden><header><strong>Conflitos de sincronização</strong><button type="button" data-close-conflicts aria-label="Fechar">{{icon "close"}}</button></header><div data-conflict-list></div></aside>
   {{end}}

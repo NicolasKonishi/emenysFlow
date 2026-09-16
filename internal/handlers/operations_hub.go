@@ -30,6 +30,7 @@ func (a *App) renderEventChecklist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.Event = event
+	data.EventNotes, _ = a.store.ListEventNotes(r.Context(), id)
 	checklist, err := a.store.GetChecklistByEvent(r.Context(), id)
 	if err == sql.ErrNoRows {
 		checklist, err = a.checklist.GenerateTracked(r.Context(), id, "initial_generation", currentUser(r).ID)
@@ -46,9 +47,18 @@ func (a *App) renderEventChecklist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tab := operationTab(r)
-	data.Checklist = filterChecklistForTab(checklist, shortages, tab)
+	operationalChecklist, decorationChecklist := splitEventChecklists(checklist)
+	operationalShortages, decorationShortages := splitEventShortages(shortages, operationalChecklist, decorationChecklist)
+	data.Checklist = filterChecklistForTab(operationalChecklist, operationalShortages, tab)
 	data.Groups = groupChecklist(data.Checklist.Items)
-	data.Shortages = activeShortages(shortages)
+	data.DecorationChecklist = filterChecklistForTab(decorationChecklist, decorationShortages, tab)
+	data.DecorationGroups = groupChecklist(data.DecorationChecklist.Items)
+	data.Shortages = activeShortages(operationalShortages)
+	data.DecorationShortages = activeShortages(decorationShortages)
+	data.MissingCount = checklistMissingCount(operationalChecklist, operationalShortages) + checklistMissingCount(decorationChecklist, decorationShortages)
+	if event.HasDecoration || len(decorationChecklist.Items) > 0 {
+		data.DecorationProfile, _ = a.store.GetDecorationProfile(r.Context(), id)
+	}
 	data.ActiveTab = tab
 	a.render(w, r, "event_show", data)
 }
@@ -71,6 +81,22 @@ func activeShortages(shortages []models.ChecklistShortage) []models.ChecklistSho
 	return active
 }
 
+func checklistMissingCount(checklist models.Checklist, shortages []models.ChecklistShortage) int {
+	active := map[int64]bool{}
+	for _, shortage := range shortages {
+		if shortage.Status != "resolved" && shortage.Status != "cancelled" {
+			active[shortage.ChecklistItemID] = true
+		}
+	}
+	count := 0
+	for _, item := range checklist.Items {
+		if active[item.ID] || item.LoadingMissingQuantity > 0 {
+			count++
+		}
+	}
+	return count
+}
+
 func filterChecklistForTab(checklist models.Checklist, shortages []models.ChecklistShortage, tab string) models.Checklist {
 	active := map[int64]*models.ChecklistShortage{}
 	for index := range shortages {
@@ -82,7 +108,7 @@ func filterChecklistForTab(checklist models.Checklist, shortages []models.Checkl
 	for _, item := range checklist.Items {
 		item.Shortage = active[item.ID]
 		if tab == "missing" {
-			if item.Shortage != nil {
+			if item.Shortage != nil || item.LoadingMissingQuantity > 0 {
 				filtered = append(filtered, item)
 			}
 			continue

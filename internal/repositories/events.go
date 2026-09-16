@@ -47,6 +47,11 @@ func scanEvent(scanner interface{ Scan(...any) error }) (models.Event, error) {
 func (s *Store) ListEvents(ctx context.Context, query string) ([]models.Event, error) {
 	pattern := "%" + strings.TrimSpace(query) + "%"
 	rows, err := s.db.QueryContext(ctx, `SELECT `+eventColumns+`,
+		COALESCE((SELECT GROUP_CONCAT(note_summary, ' · ') FROM (
+			SELECT TRIM(title || CASE WHEN TRIM(content) <> '' THEN ': ' || REPLACE(REPLACE(content, char(10), ' '), char(13), ' ') ELSE '' END) AS note_summary
+			FROM event_notes WHERE event_id=e.id
+			ORDER BY updated_at DESC, id DESC LIMIT 2
+		)), ''),
 		COALESCE((SELECT 100.0 * SUM(MIN(ci.separated_quantity / NULLIF(ci.required_quantity,0),1)) / NULLIF(COUNT(*),0) FROM checklists c JOIN checklist_items ci ON ci.checklist_id=c.id WHERE c.event_id=e.id AND ci.active=1),0),
 		COALESCE((SELECT 100.0 * SUM(MIN(ci.separated_quantity / NULLIF(ci.required_quantity,0),1)) / NULLIF(COUNT(*),0) FROM checklists c JOIN checklist_items ci ON ci.checklist_id=c.id WHERE c.event_id=e.id AND ci.active=1),0),
 		COALESCE((SELECT 100.0 * SUM(MIN(ci.loaded_quantity / NULLIF(ci.required_quantity,0),1)) / NULLIF(COUNT(*),0) FROM checklists c JOIN checklist_items ci ON ci.checklist_id=c.id WHERE c.event_id=e.id AND ci.active=1),0),
@@ -72,6 +77,7 @@ func (s *Store) ListEvents(ctx context.Context, query string) ([]models.Event, e
 			&event.SafetyMarginPercent, &event.WaiterOverride, &event.KitchenCookID, &event.KitchenCookName,
 			&event.CoordinatorOverride, &event.LeaderOverride, &event.CoLeaderOverride, &event.AdditionalGuestMarginOverride, &glassware,
 			&event.Status, &active, &created, &updated, &event.RowVersion,
+			&event.CalendarNoteSummary,
 			&event.ChecklistProgress, &event.SeparationProgress, &event.LoadingProgress, &event.MissingItems, &event.PendingPurchases, &event.PendingRentals,
 		)
 		if err != nil {

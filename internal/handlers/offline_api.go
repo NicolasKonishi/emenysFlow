@@ -15,6 +15,7 @@ import (
 
 type offlineEventBundle struct {
 	Event       models.Event                      `json:"event"`
+	Notes       []models.EventNote                `json:"notes"`
 	Checklist   models.Checklist                  `json:"checklist"`
 	Menu        []models.EventMenuSnapshotSection `json:"menu"`
 	ServiceIDs  []int64                           `json:"service_ids"`
@@ -23,7 +24,7 @@ type offlineEventBundle struct {
 }
 
 func (a *App) offlineBootstrap(w http.ResponseWriter, r *http.Request) {
-	if err := a.requirePermission(r, models.PermChecklist); err != nil {
+	if err := a.requirePermission(r, models.PermEventView); err != nil {
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": "Acesso restrito para o seu perfil."})
 		return
 	}
@@ -39,15 +40,16 @@ func (a *App) offlineBootstrap(w http.ResponseWriter, r *http.Request) {
 		menu, _ := a.store.EventMenuSnapshotSections(r.Context(), event.ID)
 		services, _ := a.store.EventServiceModelIDs(r.Context(), event.ID)
 		shortages, _ := a.store.ListEventShortages(r.Context(), event.ID, true)
+		notes, _ := a.store.ListEventNotes(r.Context(), event.ID)
 		floorLayout, _ := a.store.GetEventFloorLayout(r.Context(), event.ID)
-		bundles = append(bundles, offlineEventBundle{Event: event, Checklist: checklist, Menu: menu, ServiceIDs: services, Shortages: shortages, FloorLayout: floorLayout})
+		bundles = append(bundles, offlineEventBundle{Event: event, Notes: notes, Checklist: checklist, Menu: menu, ServiceIDs: services, Shortages: shortages, FloorLayout: floorLayout})
 	}
 	inventory, _ := a.store.ListInventory(r.Context(), "", "", false)
 	menus, _ := a.store.ListMenuModels(r.Context(), false)
 	services, _ := a.store.ListServiceModels(r.Context(), false)
 	settings, _ := a.store.OperationalSettings(r.Context())
 	standaloneLayouts, _ := a.store.ListStandaloneFloorLayouts(r.Context(), "")
-	writeJSON(w, 200, map[string]any{"schema_version": 2, "synced_at": time.Now().UTC(), "offline_access_expires_at": time.Now().Add(12 * time.Hour).UTC(), "user": user, "events": bundles, "standalone_layouts": standaloneLayouts, "inventory": inventory, "menu_models": menus, "service_models": services, "operational_settings": settings})
+	writeJSON(w, 200, map[string]any{"schema_version": 3, "synced_at": time.Now().UTC(), "offline_access_expires_at": time.Now().Add(12 * time.Hour).UTC(), "user": user, "events": bundles, "standalone_layouts": standaloneLayouts, "inventory": inventory, "menu_models": menus, "service_models": services, "operational_settings": settings})
 }
 
 func (a *App) syncOperations(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +89,8 @@ func (a *App) syncOperations(w http.ResponseWriter, r *http.Request) {
 func syncOperationPermission(operationType string) string {
 	switch operationType {
 	case "update_event_draft":
+		return models.PermEventEdit
+	case "save_event_note":
 		return models.PermEventEdit
 	case "save_event_layout", "save_standalone_layout":
 		return models.PermLayouts
@@ -144,6 +148,17 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 		err = saveErr
 	case "update_event_draft":
 		err = a.applyOfflineEventDraft(r, eventID, request.BaseVersion, payload, user.ID)
+	case "save_event_note":
+		note := models.EventNote{
+			ID: request.EntityID, EventID: eventID, Category: "general",
+			Title: strings.TrimSpace(stringValue(payload["title"])), Content: strings.TrimSpace(stringValue(payload["content"])),
+		}
+		if note.Title == "" {
+			err = fmt.Errorf("informe um título para a anotação")
+		} else {
+			err = a.store.SaveEventNote(r.Context(), &note, user.ID, request.BaseVersion)
+			result.EntityID = note.ID
+		}
 	case "save_event_layout":
 		layoutJSON := stringValue(payload["layout_json"])
 		if !json.Valid([]byte(layoutJSON)) {
@@ -180,6 +195,16 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 				result.Version = event.RowVersion
 			}
 		}
+		if request.OperationType == "save_event_note" && result.EntityID > 0 {
+			if notes, loadErr := a.store.ListEventNotes(r.Context(), eventID); loadErr == nil {
+				for _, note := range notes {
+					if note.ID == result.EntityID {
+						result.Version = note.RowVersion
+						break
+					}
+				}
+			}
+		}
 		return result
 	}
 	if strings.Contains(err.Error(), "version conflict") {
@@ -190,6 +215,16 @@ func (a *App) applySyncOperation(r *http.Request, request models.SyncOperationRe
 			if event, loadErr := a.store.GetEvent(r.Context(), eventID); loadErr == nil {
 				result.ServerSnapshot = event
 				result.Version = event.RowVersion
+			}
+		case "save_event_note":
+			if notes, loadErr := a.store.ListEventNotes(r.Context(), eventID); loadErr == nil {
+				for _, note := range notes {
+					if note.ID == request.EntityID {
+						result.ServerSnapshot = note
+						result.Version = note.RowVersion
+						break
+					}
+				}
 			}
 		case "save_event_layout":
 			if layout, loadErr := a.store.GetEventFloorLayout(r.Context(), eventID); loadErr == nil {

@@ -77,14 +77,34 @@ func (a *App) redirectOnlineHome(writer http.ResponseWriter, request *http.Reque
 }
 
 func (a *App) onlineDashboard(writer http.ResponseWriter, request *http.Request) {
+	a.renderCalendarDashboard(writer, request, "dashboard")
+}
+
+func (a *App) calendarPage(writer http.ResponseWriter, request *http.Request) {
+	// The calendar now lives on the dashboard. Keep this redirect for saved
+	// links, including the month/date query used by the previous screen.
+	target := "/"
+	if request.URL.RawQuery != "" {
+		target += "?" + request.URL.RawQuery
+	}
+	a.redirect(writer, request, target, http.StatusSeeOther)
+}
+
+func (a *App) renderCalendarDashboard(writer http.ResponseWriter, request *http.Request, nav string) {
 	setWorkspaceCookie(writer, "online", a.secureCookies)
-	data := a.baseData(request, "Visão geral", "dashboard")
+	data := a.baseData(request, "Visão geral", nav)
 	data.Workspace = "online"
 	dashboard, err := a.store.Dashboard(request.Context())
 	if err != nil {
 		data.Error = databaseErrorMessage(err)
 	} else {
 		data.Dashboard = dashboard
+	}
+	events, eventsErr := a.store.ListEvents(request.Context(), "")
+	if eventsErr != nil && data.Error == "" {
+		data.Error = databaseErrorMessage(eventsErr)
+	} else {
+		data.Calendar = buildEventCalendar(events, request.URL.Query().Get("month"), request.URL.Query().Get("date"), a.location)
 	}
 	a.render(writer, request, "dashboard", data)
 }

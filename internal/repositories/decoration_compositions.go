@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"buffetflow/internal/models"
@@ -73,6 +74,43 @@ func (s *Store) SaveDecorationProfile(ctx context.Context, profile *models.Decor
 	})
 }
 
+// EnsureDefaultDecorationCompositions provides a predictable starting point
+// for each event while still allowing the team to add custom compositions.
+func (s *Store) EnsureDefaultDecorationCompositions(ctx context.Context, eventID, userID int64) error {
+	profile, err := s.GetDecorationProfile(ctx, eventID)
+	if err != nil {
+		return err
+	}
+	if profile.ID == 0 {
+		profile.Active = true
+		if err := s.SaveDecorationProfile(ctx, &profile, userID); err != nil {
+			return err
+		}
+	}
+	defaults := []struct {
+		name, kind string
+		order      int
+	}{
+		{"Mesa do bolo", "cake_table", 10},
+		{"Mesas dos convidados", "guest_tables", 20},
+		{"Cerimônia", "ceremony", 30},
+		{"Outras decorações", "other", 40},
+	}
+	for _, item := range defaults {
+		var exists int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_decoration_compositions WHERE profile_id=? AND composition_type=?`, profile.ID, item.kind).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO event_decoration_compositions(profile_id,name,composition_type,sort_order,row_version,created_at,updated_at) VALUES(?,?,?,?,1,?,?)`, profile.ID, item.name, item.kind, item.order, nowString(), nowString()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) SaveDecorationComposition(ctx context.Context, eventID int64, item *models.DecorationComposition) error {
 	profile, err := s.GetDecorationProfile(ctx, eventID)
 	if err != nil {
@@ -115,7 +153,7 @@ func (s *Store) RemoveDecorationComposition(ctx context.Context, eventID, compos
 }
 
 func (s *Store) decorationCompositionItems(ctx context.Context, compositionID int64) ([]models.DecorationCompositionItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT item.id,item.composition_id,item.decoration_id,item.inventory_item_id,COALESCE(NULLIF(item.custom_name,''),decoration.name,inventory.name,''),item.color,item.quantity,item.origin,item.supplier_id,item.supplier_name,item.estimated_cost_cents,item.pickup_at,item.return_at,item.order_reference,COALESCE(item.rental_status,''),item.notes,item.sort_order,item.row_version FROM event_decoration_composition_items item LEFT JOIN decorations decoration ON decoration.id=item.decoration_id LEFT JOIN inventory_items inventory ON inventory.id=item.inventory_item_id WHERE item.composition_id=? ORDER BY item.sort_order,item.id`, compositionID)
+	rows, err := s.db.QueryContext(ctx, `SELECT item.id,item.composition_id,item.decoration_id,item.inventory_item_id,COALESCE(NULLIF(item.custom_name,''),decoration.name,inventory.name,''),item.color,item.arrangement_kind,item.fake_cake_type,item.quantity,item.origin,item.supplier_id,item.supplier_name,item.estimated_cost_cents,item.pickup_at,item.return_at,item.order_reference,COALESCE(item.rental_status,''),item.notes,item.sort_order,item.row_version FROM event_decoration_composition_items item LEFT JOIN decorations decoration ON decoration.id=item.decoration_id LEFT JOIN inventory_items inventory ON inventory.id=item.inventory_item_id WHERE item.composition_id=? ORDER BY item.sort_order,item.id`, compositionID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +162,7 @@ func (s *Store) decorationCompositionItems(ctx context.Context, compositionID in
 	for rows.Next() {
 		var item models.DecorationCompositionItem
 		var pickup, returned sql.NullString
-		if err := rows.Scan(&item.ID, &item.CompositionID, &item.DecorationID, &item.InventoryItemID, &item.Name, &item.Color, &item.Quantity, &item.Origin, &item.SupplierID, &item.SupplierName, &item.EstimatedCostCents, &pickup, &returned, &item.OrderReference, &item.RentalStatus, &item.Notes, &item.SortOrder, &item.RowVersion); err != nil {
+		if err := rows.Scan(&item.ID, &item.CompositionID, &item.DecorationID, &item.InventoryItemID, &item.Name, &item.Color, &item.ArrangementKind, &item.FakeCakeType, &item.Quantity, &item.Origin, &item.SupplierID, &item.SupplierName, &item.EstimatedCostCents, &pickup, &returned, &item.OrderReference, &item.RentalStatus, &item.Notes, &item.SortOrder, &item.RowVersion); err != nil {
 			return nil, err
 		}
 		if pickup.Valid {
@@ -156,14 +194,14 @@ func (s *Store) SaveDecorationCompositionItem(ctx context.Context, eventID int64
 	returned := timeOrNil(item.ReturnAt)
 	now := nowString()
 	if item.ID == 0 {
-		result, err := s.db.ExecContext(ctx, `INSERT INTO event_decoration_composition_items(composition_id,decoration_id,inventory_item_id,custom_name,color,quantity,origin,supplier_id,supplier_name,estimated_cost_cents,pickup_at,return_at,order_reference,rental_status,notes,sort_order,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`, item.CompositionID, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Color, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, now)
+		result, err := s.db.ExecContext(ctx, `INSERT INTO event_decoration_composition_items(composition_id,decoration_id,inventory_item_id,custom_name,color,arrangement_kind,fake_cake_type,quantity,origin,supplier_id,supplier_name,estimated_cost_cents,pickup_at,return_at,order_reference,rental_status,notes,sort_order,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)`, item.CompositionID, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Color, item.ArrangementKind, item.FakeCakeType, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, now)
 		if err != nil {
 			return err
 		}
 		item.ID, _ = result.LastInsertId()
 		return nil
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE event_decoration_composition_items SET decoration_id=?,inventory_item_id=?,custom_name=?,color=CASE WHEN ?='' THEN color ELSE ? END,quantity=?,origin=?,supplier_id=?,supplier_name=?,estimated_cost_cents=?,pickup_at=?,return_at=?,order_reference=?,rental_status=?,notes=?,sort_order=?,row_version=row_version+1,updated_at=? WHERE id=? AND composition_id=?`, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Color, item.Color, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, item.ID, item.CompositionID)
+	result, err := s.db.ExecContext(ctx, `UPDATE event_decoration_composition_items SET decoration_id=?,inventory_item_id=?,custom_name=?,color=?,arrangement_kind=?,fake_cake_type=?,quantity=?,origin=?,supplier_id=?,supplier_name=?,estimated_cost_cents=?,pickup_at=?,return_at=?,order_reference=?,rental_status=?,notes=?,sort_order=?,row_version=row_version+1,updated_at=? WHERE id=? AND composition_id=?`, nullInt64(item.DecorationID), nullInt64(item.InventoryItemID), item.Name, item.Color, item.ArrangementKind, item.FakeCakeType, item.Quantity, item.Origin, nullInt64(item.SupplierID), item.SupplierName, nullInt64(item.EstimatedCostCents), pickup, returned, item.OrderReference, nullIfEmpty(item.RentalStatus), item.Notes, item.SortOrder, now, item.ID, item.CompositionID)
 	if err != nil {
 		return err
 	}
@@ -344,5 +382,76 @@ func (s *Store) SyncDecorationRentalChecklist(ctx context.Context, eventID int64
 			}
 		}
 		return nil
+	})
+}
+
+// SyncDecorationCompositionChecklist keeps custom, owned pieces visible in
+// the separate decoration card even when they are planning-only items and do
+// not yet have an inventory record to reserve.
+func (s *Store) SyncDecorationCompositionChecklist(ctx context.Context, eventID int64) error {
+	return withTx(ctx, s.db, func(tx *sql.Tx) error {
+		var checklistID, categoryID int64
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM checklists WHERE event_id=?`, eventID).Scan(&checklistID); err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM inventory_categories WHERE name='Itens alugados'`).Scan(&categoryID); err != nil {
+			return err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT item.id,COALESCE(NULLIF(item.custom_name,''),decoration.name,''),item.color,item.quantity,item.notes
+			FROM event_decoration_composition_items item
+			JOIN event_decoration_compositions composition ON composition.id=item.composition_id
+			JOIN event_decoration_profiles profile ON profile.id=composition.profile_id
+			LEFT JOIN decorations decoration ON decoration.id=item.decoration_id
+			WHERE profile.event_id=? AND profile.active=1 AND item.origin<>'rented' AND item.inventory_item_id IS NULL`, eventID)
+		if err != nil {
+			return err
+		}
+		type compositionItem struct {
+			id                 int64
+			name, color, notes string
+			quantity           float64
+		}
+		var items []compositionItem
+		for rows.Next() {
+			var item compositionItem
+			if err := rows.Scan(&item.id, &item.name, &item.color, &item.quantity, &item.notes); err != nil {
+				rows.Close()
+				return err
+			}
+			if strings.TrimSpace(item.name) != "" && item.quantity > 0 {
+				items = append(items, item)
+			}
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		now := nowString()
+		keys := make([]string, 0, len(items))
+		for _, item := range items {
+			key := fmt.Sprintf("decoration-composition:%d", item.id)
+			keys = append(keys, key)
+			notes := item.notes
+			if item.color != "" {
+				notes = "Cor: " + item.color
+				if item.notes != "" {
+					notes += " · " + item.notes
+				}
+			}
+			_, err := tx.ExecContext(ctx, `INSERT INTO checklist_items(checklist_id,category_id,source_key,name,unit,calculated_quantity,required_quantity,available_quantity,missing_quantity,calculation_origin,notes,status,item_kind,manual_item,active,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,? ,?,'pending','reusable',0,1,1,?,?) ON CONFLICT(checklist_id,source_key) DO UPDATE SET name=excluded.name,calculated_quantity=excluded.calculated_quantity,required_quantity=excluded.required_quantity,available_quantity=excluded.available_quantity,missing_quantity=excluded.missing_quantity,notes=excluded.notes,active=1,row_version=checklist_items.row_version+1,updated_at=excluded.updated_at`, checklistID, categoryID, key, item.name, "unidade", item.quantity, item.quantity, item.quantity, 0, "Decoração configurada para o evento", notes, now, now)
+			if err != nil {
+				return err
+			}
+		}
+		if len(keys) == 0 {
+			_, err = tx.ExecContext(ctx, `UPDATE checklist_items SET active=0,row_version=row_version+1,updated_at=? WHERE checklist_id=? AND source_key LIKE 'decoration-composition:%'`, now, checklistID)
+			return err
+		}
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
+		args := []any{now, checklistID}
+		for _, key := range keys {
+			args = append(args, key)
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE checklist_items SET active=0,row_version=row_version+1,updated_at=? WHERE checklist_id=? AND source_key LIKE 'decoration-composition:%' AND source_key NOT IN (`+placeholders+`)`, args...)
+		return err
 	})
 }

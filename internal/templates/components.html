@@ -48,3 +48,21 @@
 <label class="sync-switch"><input type="checkbox" data-sync-enabled><span>Sincronizar alterações automaticamente</span></label>
 {{end}}
 
+{{define "event_checklist_annotations"}}
+{{if or .Event.Notes .EventNotes}}
+<aside class="checklist-briefing" aria-label="Anotações do evento">
+  <div><span class="eyebrow">Orientações do evento</span><h3>Anotações para a equipe</h3></div>
+  {{if .Event.Notes}}<ul class="checklist-briefing-lines">{{range observationLines .Event.Notes}}<li>{{.}}</li>{{end}}</ul>{{end}}
+  {{if .EventNotes}}<div class="checklist-note-summaries">{{range .EventNotes}}<article>{{if .Title}}<strong>{{.Title}}</strong>{{end}}{{if .Content}}<p>{{.Content}}</p>{{end}}{{if .Photos}}<small>{{len .Photos}} referência(s) anexada(s)</small>{{end}}</article>{{end}}</div>{{end}}
+</aside>
+{{end}}
+{{end}}
+
+{{define "decoration_checklist_context"}}
+<section class="decoration-checklist-context" aria-label="Referências e configuração da decoração">
+  <header><div><span class="eyebrow">Configuração do evento</span><h3>Referências da decoração</h3><p>Confira as escolhas, cores e imagens antes de separar as peças.</p></div>{{if $.DecorationProfile.PrimaryColors}}<span class="simple-check-color">{{$.DecorationProfile.PrimaryColors}}</span>{{end}}</header>
+  {{if .DecorationProfile.Compositions}}<div class="decoration-composition-summary">{{range .DecorationProfile.Compositions}}{{if or .Items .Photos}}<article><header><strong>{{.Name}}</strong>{{if .AssemblyLocation}}<small>{{.AssemblyLocation}}</small>{{end}}</header>{{if .Items}}<ul>{{range .Items}}<li><strong>{{number .Quantity}} {{.Name}}</strong>{{if .Color}}<span>{{.Color}}</span>{{end}}{{if .ArrangementKind}}<span>{{.ArrangementKind}}</span>{{end}}{{if .FakeCakeType}}<span>{{.FakeCakeType}}</span>{{end}}{{if eq .Origin "rented"}}<em>Alugar</em>{{end}}</li>{{end}}</ul>{{end}}{{if .Photos}}<div class="reference-photo-grid checklist-reference-photos">{{range .Photos}}<figure><button class="reference-photo-button" type="button" data-image-preview data-preview-src="/photos/{{.ID}}" data-preview-alt="{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}"><img src="/photos/{{.ID}}" alt="{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}"></button><figcaption>{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}</figcaption></figure>{{end}}</div>{{end}}</article>{{end}}{{end}}</div>{{end}}
+  {{if .DecorationProfile.Photos}}<div class="reference-photo-grid checklist-reference-photos">{{range .DecorationProfile.Photos}}<figure><button class="reference-photo-button" type="button" data-image-preview data-preview-src="/photos/{{.ID}}" data-preview-alt="{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}"><img src="/photos/{{.ID}}" alt="{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}"></button><figcaption>{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}</figcaption></figure>{{end}}</div>{{end}}
+  {{if .EventNotes}}<div class="decoration-note-photo-references">{{range .EventNotes}}{{if .Photos}}<article><strong>{{.Title}}</strong><div class="reference-photo-grid checklist-reference-photos">{{range .Photos}}<figure><button class="reference-photo-button" type="button" data-image-preview data-preview-src="/event-notes/photos/{{.ID}}" data-preview-alt="{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}"><img src="/event-notes/photos/{{.ID}}" alt="{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}"></button><figcaption>{{if .Caption}}{{.Caption}}{{else}}{{.OriginalName}}{{end}}</figcaption></figure>{{end}}</div></article>{{end}}{{end}}</div>{{end}}
+</section>
+{{end}}

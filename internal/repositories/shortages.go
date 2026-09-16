@@ -90,6 +90,42 @@ func (s *Store) EnsureCalculatedShortages(ctx context.Context, eventID int64) er
 	})
 }
 
+// syncLoadingShortage keeps automatic shortages aligned with what was
+// actually loaded for an event. A manual shortage remains owned by the team,
+// but its loading difference is still exposed from checklist_items.
+func syncLoadingShortage(ctx context.Context, tx *sql.Tx, eventID, itemID int64, required, loaded float64, userID int64, now string) error {
+	missing := maxFloat(0, required-loaded)
+	if missing <= 0 {
+		return closeChecklistItemShortages(ctx, tx, itemID, "resolved", "loading", "Carregamento concluído sem falta.", userID, now)
+	}
+
+	var shortageID int64
+	var automatic int
+	err := tx.QueryRowContext(ctx, `SELECT id,automatic FROM checklist_shortages
+		WHERE checklist_item_id=? AND status NOT IN ('resolved','cancelled')
+		ORDER BY updated_at DESC,id DESC LIMIT 1`, itemID).Scan(&shortageID, &automatic)
+	if err == sql.ErrNoRows {
+		result, insertErr := tx.ExecContext(ctx, `INSERT INTO checklist_shortages(checklist_item_id,event_id,missing_quantity,reason,resolution_type,status,notes,automatic,row_version,created_by,created_at,updated_at)
+			VALUES(?,?,?,'Falta detectada no carregamento.','other','pending','Gerada automaticamente a partir da conferência de carregamento.',1,1,?,?,?)`,
+			itemID, eventID, missing, nullableUserID(userID), now, now)
+		if insertErr != nil {
+			return insertErr
+		}
+		shortageID, _ = result.LastInsertId()
+		_, err = tx.ExecContext(ctx, `INSERT INTO checklist_shortage_history(shortage_id,new_status,notes,changed_by,created_at)
+			VALUES(?,'pending','Falta detectada automaticamente no carregamento.',?,?)`, shortageID, nullableUserID(userID), now)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if automatic == 1 {
+		_, err = tx.ExecContext(ctx, `UPDATE checklist_shortages SET missing_quantity=?,reason='Falta detectada no carregamento.',
+			notes='Atualizada automaticamente a partir da conferência de carregamento.',row_version=row_version+1,updated_at=? WHERE id=?`, missing, now, shortageID)
+	}
+	return err
+}
+
 func (s *Store) ChecklistItemRequired(ctx context.Context, eventID, itemID int64) (float64, error) {
 	var required float64
 	err := s.db.QueryRowContext(ctx, `SELECT item.required_quantity FROM checklist_items item JOIN checklists checklist ON checklist.id=item.checklist_id WHERE item.id=? AND checklist.event_id=? AND item.active=1`, itemID, eventID).Scan(&required)
@@ -155,8 +191,15 @@ func (s *Store) UpdateShortageStatus(ctx context.Context, eventID, shortageID in
 	return withTx(ctx, s.db, func(tx *sql.Tx) error {
 		var previous string
 		var checklistItemID int64
-		if err := tx.QueryRowContext(ctx, `SELECT status,checklist_item_id FROM checklist_shortages WHERE id=? AND event_id=?`, shortageID, eventID).Scan(&previous, &checklistItemID); err != nil {
+		var automatic int
+		var loadingMissing float64
+		if err := tx.QueryRowContext(ctx, `SELECT shortage.status,shortage.checklist_item_id,shortage.automatic,item.loading_missing_quantity
+			FROM checklist_shortages shortage JOIN checklist_items item ON item.id=shortage.checklist_item_id
+			WHERE shortage.id=? AND shortage.event_id=?`, shortageID, eventID).Scan(&previous, &checklistItemID, &automatic, &loadingMissing); err != nil {
 			return err
+		}
+		if status == "cancelled" && automatic == 1 && loadingMissing > 0 {
+			return fmt.Errorf("a falta do carregamento só pode ser resolvida depois de conferir a quantidade")
 		}
 		now := nowString()
 		resolvedAt := any(nil)
@@ -243,6 +286,9 @@ func (s *Store) SaveOperationalQuantity(ctx context.Context, eventID, itemID int
 				return err
 			}
 			loaded = quantity
+			if err := syncLoadingShortage(ctx, tx, eventID, itemID, required, loaded, userID, now); err != nil {
+				return err
+			}
 		}
 		newVersion = version + 1
 		after := fmt.Sprintf(`{"separated_quantity":%g,"loaded_quantity":%g,"version":%d}`, separated, loaded, newVersion)

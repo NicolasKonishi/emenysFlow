@@ -59,6 +59,59 @@ type Event struct {
 	MissingItems                  int
 	PendingPurchases              int
 	PendingRentals                int
+	CalendarNoteSummary           string
+}
+
+// EventNote records a general event annotation and its visual references.
+// Photos are deliberately attached to the note, so the reference stays
+// understandable when the event changes later.
+type EventNote struct {
+	ID         int64
+	EventID    int64
+	Category   string
+	Title      string
+	Content    string
+	VisitAt    time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	RowVersion int
+	Photos     []EventNotePhoto
+}
+
+type EventNotePhoto struct {
+	ID             int64
+	EventNoteID    int64
+	ClientUploadID string
+	StoragePath    string
+	OriginalName   string
+	MIMEType       string
+	FileSize       int64
+	Caption        string
+	CreatedAt      time.Time
+}
+
+type CalendarDay struct {
+	Date    time.Time
+	DateKey string
+	Day     int
+	InMonth bool
+	IsToday bool
+	Events  []Event
+}
+
+type EventDateGroup struct {
+	Date   time.Time
+	Events []Event
+}
+
+type EventCalendar struct {
+	Month          time.Time
+	PreviousMonth  string
+	NextMonth      string
+	SelectedDate   string
+	SelectedEvents []Event
+	Days           []CalendarDay
+	Upcoming       []EventDateGroup
 }
 
 type KitchenCook struct {
@@ -117,6 +170,30 @@ type InventoryItem struct {
 	ReplacementValueCents int64
 	Notes                 string
 	Active                bool
+}
+
+// InventoryTab is one of the permanent operational views of stock. Keeping
+// the grouping explicit avoids mixing food, disposables and durable material
+// in a single working list.
+type InventoryTab struct {
+	Key   string
+	Label string
+	Count int
+}
+
+// InventoryAlert describes a shortage that is still open for an event. The
+// missing quantity reflects the loading check when one has been recorded.
+type InventoryAlert struct {
+	EventID         int64
+	EventName       string
+	ClientName      string
+	StartsAt        time.Time
+	ChecklistItemID int64
+	ItemName        string
+	Unit            string
+	Required        float64
+	Loaded          float64
+	Missing         float64
 }
 
 type Category struct {

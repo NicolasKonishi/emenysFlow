@@ -2,13 +2,13 @@
   "use strict";
 
   const DB_NAME = "buffetflow-offline";
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const DEVICE_KEY = "buffetflow_device_id";
   const SYNC_PREF_KEY = "buffetflow_sync_enabled";
   let registration;
   let synchronizing = false;
 
-  const isSyncEnabled = () => localStorage.getItem(SYNC_PREF_KEY) === "1";
+  const isSyncEnabled = () => localStorage.getItem(SYNC_PREF_KEY) !== "0";
   const setSyncEnabled = (enabled) => localStorage.setItem(SYNC_PREF_KEY, enabled ? "1" : "0");
   const shouldOpenOnlineOnReconnect = () => localStorage.getItem(OPEN_ONLINE_KEY) !== "0";
   const setOpenOnlineOnReconnect = (enabled) => localStorage.setItem(OPEN_ONLINE_KEY, enabled ? "1" : "0");
@@ -120,6 +120,7 @@
   function isOfflineCapablePath(path = location.pathname) {
     return path === "/offline"
       || path.startsWith("/layouts")
+      || /^\/events\/\d+$/.test(path)
       || /\/events\/\d+\/(operation|layout)/.test(path)
       || path.endsWith("/offline.html");
   }
@@ -260,7 +261,10 @@
   async function watchServiceConnection() {
     const reachable = await probeService();
     await applyServiceState(reachable);
-    if (reachable && canUseOfflineData()) refreshBootstrap().catch(() => null);
+    if (reachable && canUseOfflineData()) {
+      if (isSyncEnabled()) syncOperations().catch(() => null);
+      else refreshBootstrap().catch(() => null);
+    }
     return reachable;
   }
 
@@ -283,6 +287,7 @@
     for (const bundle of data?.events || []) {
       const id = eventField(bundle.event || {}, "id", "ID");
       if (id) {
+        urls.add(`/events/${id}`);
         urls.add(`/events/${id}/operation`);
         urls.add(`/events/${id}/layout`);
       }
@@ -890,9 +895,9 @@
         try {
           await refreshBootstrap();
           await renderOfflineHome();
-          window.alert("Eventos e layouts foram salvos neste aparelho.");
+          window.emenysAlert?.("Eventos e layouts foram salvos neste aparelho.", "success");
         } catch (error) {
-          window.alert(error.message || "Não foi possível salvar os dados offline.");
+          window.emenysAlert?.(error.message || "Não foi possível salvar os dados offline.", "danger");
         } finally {
           button.disabled = false;
         }
@@ -919,6 +924,7 @@
   };
 
   document.addEventListener("submit", async (event) => {
+    if (event.defaultPrevented) return;
     const workspaceForm = event.target.closest('form[action="/workspace"]');
     if (workspaceForm) {
       const workspace = new FormData(workspaceForm).get("workspace");
@@ -934,19 +940,18 @@
       return;
     }
     const photoForm = event.target.closest("form[data-offline-photo-form]");
-    if (photoForm && !navigator.onLine) {
+    if (photoForm && (!navigator.onLine || serviceReachable === false)) {
       event.preventDefault();
-      try { await queuePhotos(photoForm); } catch (error) { window.alert(error.message); }
+      try { await queuePhotos(photoForm); } catch (error) { window.emenysAlert?.(error.message, "danger"); }
       return;
     }
     const form = event.target.closest("form[data-offline-form]");
-    if (!form || navigator.onLine || !form.dataset.operationType) return;
+    if (!form || (navigator.onLine && serviceReachable !== false) || !form.dataset.operationType) return;
     event.preventDefault();
-    try { await queueForm(form); } catch (_error) { window.alert("Não foi possível salvar a alteração neste aparelho."); }
+    try { await queueForm(form); } catch (_error) { window.emenysAlert?.("Não foi possível salvar a alteração neste aparelho.", "danger"); }
   }, true);
 
   document.addEventListener("click", (event) => {
-    if (event.target.closest("[data-sync-now]")) syncOperations(true);
     if (event.target.closest("[data-close-conflicts]")) document.querySelector("[data-conflict-panel]").hidden = true;
     if (event.target.closest("[data-stay-offline]")) {
       setOpenOnlineOnReconnect(false);

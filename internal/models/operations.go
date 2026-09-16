@@ -170,6 +170,8 @@ type DecorationCompositionItem struct {
 	InventoryItemID    sql.NullInt64
 	Name               string
 	Color              string
+	ArrangementKind    string
+	FakeCakeType       string
 	Quantity           float64
 	Origin             string
 	SupplierID         sql.NullInt64

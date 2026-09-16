@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -58,6 +59,70 @@ func (a *App) decorationCompositionItemAdd(w http.ResponseWriter, r *http.Reques
 	compositionID, _ := strconv.ParseInt(r.PathValue("compositionID"), 10, 64)
 	a.saveDecorationCompositionItem(w, r, 0, compositionID)
 }
+
+// decorationQuickItemsAdd is the low-friction path used by the event
+// decorator: pick familiar pieces, choose a colour once, and add them all.
+func (a *App) decorationQuickItemsAdd(w http.ResponseWriter, r *http.Request) {
+	eventID, err := pathID(r)
+	compositionID, _ := strconv.ParseInt(r.PathValue("compositionID"), 10, 64)
+	if err != nil || compositionID <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if err = r.ParseForm(); err != nil {
+		decorationRedirect(w, r, eventID, err, "")
+		return
+	}
+	profile, err := a.store.GetDecorationProfile(r.Context(), eventID)
+	existing := map[string]bool{}
+	if err == nil {
+		for _, composition := range profile.Compositions {
+			if composition.ID != compositionID {
+				continue
+			}
+			for _, item := range composition.Items {
+				existing[strings.ToLower(strings.TrimSpace(item.Name))] = true
+			}
+		}
+	}
+	added := 0
+	for _, rawName := range r.Form["quick_item"] {
+		name := strings.TrimSpace(rawName)
+		if name == "" || existing[strings.ToLower(name)] {
+			continue
+		}
+		lowerName := strings.ToLower(name)
+		arrangementKind := ""
+		if strings.Contains(lowerName, "arranjo") {
+			arrangementKind = normalizeArrangementKind(r.FormValue("arrangement_kind"))
+		}
+		fakeCakeType := ""
+		if strings.Contains(lowerName, "bolo fake") {
+			fakeCakeType = strings.TrimSpace(r.FormValue("fake_cake_type"))
+		}
+		item := models.DecorationCompositionItem{
+			CompositionID: compositionID, Name: name, Quantity: 1,
+			Origin: r.FormValue("origin"), Color: strings.TrimSpace(r.FormValue("color")),
+			ArrangementKind: arrangementKind, FakeCakeType: fakeCakeType,
+		}
+		if err = a.store.SaveDecorationCompositionItem(r.Context(), eventID, &item); err != nil {
+			break
+		}
+		existing[strings.ToLower(name)] = true
+		added++
+	}
+	if err == nil && added == 0 {
+		err = fmt.Errorf("selecione ao menos uma peça nova")
+	}
+	if err == nil {
+		_, err = a.checklist.GenerateTracked(r.Context(), eventID, "decoration_quick_items_added", currentUser(r).ID)
+	}
+	message := "Peças adicionadas à decoração."
+	if added > 1 {
+		message = fmt.Sprintf("%d peças adicionadas à decoração.", added)
+	}
+	decorationRedirect(w, r, eventID, err, message)
+}
 func (a *App) decorationCompositionItemUpdate(w http.ResponseWriter, r *http.Request) {
 	itemID, _ := strconv.ParseInt(r.PathValue("itemID"), 10, 64)
 	compositionID, _ := strconv.ParseInt(r.FormValue("composition_id"), 10, 64)
@@ -74,7 +139,7 @@ func (a *App) saveDecorationCompositionItem(w http.ResponseWriter, r *http.Reque
 		compositionID, _ = strconv.ParseInt(r.FormValue("composition_id"), 10, 64)
 	}
 	order, _ := strconv.Atoi(r.FormValue("sort_order"))
-	item := models.DecorationCompositionItem{ID: itemID, CompositionID: compositionID, DecorationID: parseOptionalInt(r.FormValue("decoration_id")), InventoryItemID: parseOptionalInt(r.FormValue("inventory_item_id")), Name: strings.TrimSpace(r.FormValue("name")), Color: strings.TrimSpace(r.FormValue("color")), Quantity: parseFloat(r.FormValue("quantity")), Origin: r.FormValue("origin"), SupplierName: strings.TrimSpace(r.FormValue("supplier_name")), OrderReference: strings.TrimSpace(r.FormValue("order_reference")), RentalStatus: r.FormValue("rental_status"), Notes: strings.TrimSpace(r.FormValue("notes")), SortOrder: order}
+	item := models.DecorationCompositionItem{ID: itemID, CompositionID: compositionID, DecorationID: parseOptionalInt(r.FormValue("decoration_id")), InventoryItemID: parseOptionalInt(r.FormValue("inventory_item_id")), Name: strings.TrimSpace(r.FormValue("name")), Color: strings.TrimSpace(r.FormValue("color")), ArrangementKind: normalizeArrangementKind(r.FormValue("arrangement_kind")), FakeCakeType: strings.TrimSpace(r.FormValue("fake_cake_type")), Quantity: parseFloat(r.FormValue("quantity")), Origin: r.FormValue("origin"), SupplierID: parseOptionalInt(r.FormValue("supplier_id")), SupplierName: strings.TrimSpace(r.FormValue("supplier_name")), OrderReference: strings.TrimSpace(r.FormValue("order_reference")), RentalStatus: r.FormValue("rental_status"), Notes: strings.TrimSpace(r.FormValue("notes")), SortOrder: order}
 	if value := r.FormValue("estimated_cost"); value != "" {
 		item.EstimatedCostCents = sql.NullInt64{Int64: int64(parseFloat(value)*100 + 0.5), Valid: true}
 	}
@@ -89,6 +154,13 @@ func (a *App) saveDecorationCompositionItem(w http.ResponseWriter, r *http.Reque
 		_, err = a.checklist.GenerateTracked(r.Context(), eventID, "decoration_item_saved", currentUser(r).ID)
 	}
 	decorationRedirect(w, r, eventID, err, "Item da decoração salvo.")
+}
+
+func normalizeArrangementKind(value string) string {
+	if value == "permanent" || value == "natural" {
+		return value
+	}
+	return ""
 }
 func (a *App) decorationCompositionItemRemove(w http.ResponseWriter, r *http.Request) {
 	eventID, err := pathID(r)
@@ -182,6 +254,52 @@ func (a *App) decorationPhotosUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	decorationRedirect(w, r, eventID, err, "Fotos enviadas.")
+}
+
+func (a *App) saveDecorationReferencePhoto(r *http.Request, eventID, compositionID int64, header *multipart.FileHeader, sortOrder int, compositionKind string) error {
+	if header.Size <= 0 || header.Size > 8<<20 {
+		return fmt.Errorf("cada foto deve ter no máximo 8 MB")
+	}
+	source, err := header.Open()
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	head := make([]byte, 512)
+	read, _ := source.Read(head)
+	if _, err := source.Seek(0, 0); err != nil {
+		return err
+	}
+	mime := http.DetectContentType(head[:read])
+	extensions := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+	extension, ok := extensions[mime]
+	if !ok {
+		return fmt.Errorf("use imagens JPG, PNG ou WEBP")
+	}
+	random := make([]byte, 16)
+	if _, err := rand.Read(random); err != nil {
+		return err
+	}
+	directory := filepath.Join(a.uploadsDir, "events", strconv.FormatInt(eventID, 10))
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		return err
+	}
+	storagePath := filepath.Join(directory, hex.EncodeToString(random)+extension)
+	target, err := os.OpenFile(storagePath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o640)
+	if err != nil {
+		return err
+	}
+	written, copyErr := io.Copy(target, source)
+	closeErr := target.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	caption := map[string]string{"cake_table": "Referência · mesa do bolo", "guest_tables": "Referência · mesas dos convidados", "ceremony": "Referência · cerimônia", "other": "Referência · outras decorações"}[compositionKind]
+	photo := models.ReferencePhoto{EventID: eventID, CompositionID: sql.NullInt64{Int64: compositionID, Valid: true}, StoragePath: storagePath, OriginalName: filepath.Base(header.Filename), MIMEType: mime, FileSize: written, Caption: caption, SortOrder: sortOrder}
+	return a.store.SaveReferencePhoto(r.Context(), &photo, currentUser(r).ID)
 }
 func (a *App) referencePhotoView(w http.ResponseWriter, r *http.Request) {
 	photoID, _ := strconv.ParseInt(r.PathValue("photoID"), 10, 64)

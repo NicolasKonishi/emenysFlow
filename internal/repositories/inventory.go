@@ -61,6 +61,41 @@ func (s *Store) ListStockInventory(ctx context.Context, query, category string, 
 	return s.listInventory(ctx, query, category, includeInactive, true)
 }
 
+// ListInventoryAlerts returns every event shortage that still needs action.
+// Loading differences take precedence, so the stock screen mirrors what was
+// actually left behind during loading instead of only the original estimate.
+func (s *Store) ListInventoryAlerts(ctx context.Context) ([]models.InventoryAlert, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.name,e.client_name,e.starts_at,ci.id,ci.name,ci.unit,
+		ci.required_quantity,ci.loaded_quantity,MAX(ci.loading_missing_quantity,COALESCE(shortage.missing_quantity,0))
+		FROM checklist_items ci
+		JOIN checklists checklist ON checklist.id=ci.checklist_id
+		JOIN events e ON e.id=checklist.event_id
+		LEFT JOIN checklist_shortages shortage ON shortage.id=(
+			SELECT id FROM checklist_shortages
+			WHERE checklist_item_id=ci.id AND status NOT IN ('resolved','cancelled')
+			ORDER BY updated_at DESC,id DESC LIMIT 1
+		)
+		WHERE ci.active=1 AND e.active=1 AND e.status NOT IN ('cancelled','completed')
+			AND (ci.loading_missing_quantity>0 OR shortage.id IS NOT NULL)
+		ORDER BY datetime(e.starts_at),ci.name`)
+	if err != nil {
+		return nil, fmt.Errorf("list inventory alerts: %w", err)
+	}
+	defer rows.Close()
+	var result []models.InventoryAlert
+	for rows.Next() {
+		var item models.InventoryAlert
+		var startsAt string
+		if err := rows.Scan(&item.EventID, &item.EventName, &item.ClientName, &startsAt, &item.ChecklistItemID, &item.ItemName, &item.Unit,
+			&item.Required, &item.Loaded, &item.Missing); err != nil {
+			return nil, err
+		}
+		item.StartsAt = parseTime(startsAt)
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) listInventory(ctx context.Context, query, category string, includeInactive, hideKitchenBoxItems bool) ([]models.InventoryItem, error) {
 	pattern := "%" + strings.TrimSpace(query) + "%"
 	rows, err := s.db.QueryContext(ctx, `SELECT i.id, i.name, i.description, i.category_id, c.name, i.subcategory, i.unit,

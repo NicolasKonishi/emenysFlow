@@ -1465,7 +1465,7 @@ function initializeLayoutEditor(root = document) {
   function requireVenueToContinue() {
     if (mode !== "standalone") {
       if (!(editor.dataset.venue || "").trim()) {
-        window.alert("Informe o local do evento antes de montar o layout.");
+        window.emenysAlert?.("Informe o local do evento antes de montar o layout.", "warning");
         return false;
       }
       return true;
@@ -1478,7 +1478,7 @@ function initializeLayoutEditor(root = document) {
     if (!setupOpen) openSetupSheet();
     const input = floatSheet?.querySelector("[data-layout-venue-search], [name='venue']") || metaForm?.querySelector("[name='venue']");
     input?.focus();
-    window.alert("Informe o local do evento. Se não estiver na lista, preencha o nome do espaço.");
+    window.emenysAlert?.("Informe o local do evento. Se não estiver na lista, preencha o nome do espaço.", "warning");
     return false;
   }
 
@@ -1595,7 +1595,7 @@ function initializeLayoutEditor(root = document) {
     if (!plan) return;
     const names = servingNamesForDivision(plan);
     if (!names.length) {
-      window.alert("Não há quem assuma mesa. Inclua o colíder ou cadastre mais garçons.");
+      window.emenysAlert?.("Não há quem assuma mesa. Inclua o colíder ou cadastre mais garçons.", "warning");
       return;
     }
     names.forEach((name) => layoutColorForWaiter(name, waiterRegistry));
@@ -2023,7 +2023,7 @@ function initializeLayoutEditor(root = document) {
     if (!draft?.layout_json) return;
     const shouldRestore = !navigator.onLine || (draft.updated_at && draft.updated_at > (saveForm?.dataset.loadedAt || ""));
     if (!shouldRestore && navigator.onLine) return;
-    if (navigator.onLine && !window.confirm("Encontramos um rascunho local deste layout. Deseja restaurá-lo?")) return;
+    if (navigator.onLine && !await window.emenysConfirm?.("Encontramos um rascunho local deste layout. Deseja restaurá-lo?", { confirmLabel: "Restaurar" })) return;
     if (applyLayoutDraft(draft)) {
       window.BuffetFlowOffline.showLayoutOfflineNotice?.("Rascunho local restaurado.");
     }
@@ -2735,7 +2735,7 @@ function initializeLayoutEditor(root = document) {
         if (action === "duplicate") duplicateSelected();
         if (action === "delete") deleteSelected();
         if (action === "png" || action === "pdf") {
-          exportLayout(action).catch(() => window.alert("Não foi possível exportar o layout. Tente novamente."));
+          exportLayout(action).catch(() => window.emenysAlert?.("Não foi possível exportar o layout. Tente novamente.", "danger"));
         }
         if (action === "fullscreen") toggleFullscreen();
         if (action !== "fullscreen") closeSheet();
@@ -3046,7 +3046,7 @@ function initializeLayoutEditor(root = document) {
       try {
         await exportLayout(button.dataset.layoutExport);
       } catch (_error) {
-        window.alert("Não foi possível exportar o layout. Tente novamente.");
+        window.emenysAlert?.("Não foi possível exportar o layout. Tente novamente.", "danger");
       } finally {
         button.disabled = false;
       }

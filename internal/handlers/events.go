@@ -28,6 +28,11 @@ func (a *App) eventForm(writer http.ResponseWriter, request *http.Request) {
 	data := a.baseData(request, "Novo evento", "events")
 	data.FormAction = "/events"
 	now := time.Now().In(a.location).AddDate(0, 0, 7)
+	if rawDate := strings.TrimSpace(request.URL.Query().Get("date")); rawDate != "" {
+		if selected, err := time.ParseInLocation("2006-01-02", rawDate, a.location); err == nil {
+			now = selected
+		}
+	}
 	data.Event = models.Event{StartsAt: time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, a.location), EndsAt: time.Date(now.Year(), now.Month(), now.Day()+1, 2, 0, 0, 0, a.location), GuestCount: 100, SafetyMarginPercent: 0, UsesGlassware: true}
 	if request.PathValue("id") != "" {
 		id, err := pathID(request)
@@ -73,8 +78,14 @@ func (a *App) eventForm(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (a *App) parseEventForm(request *http.Request, id int64) (models.Event, error) {
-	if err := request.ParseForm(); err != nil {
-		return models.Event{}, err
+	var parseErr error
+	if strings.HasPrefix(request.Header.Get("Content-Type"), "multipart/form-data") {
+		parseErr = request.ParseMultipartForm(32 << 20)
+	} else {
+		parseErr = request.ParseForm()
+	}
+	if parseErr != nil {
+		return models.Event{}, parseErr
 	}
 	guestCount, err := parsePositiveInt(request.FormValue("guest_count"))
 	if err != nil {
@@ -118,7 +129,9 @@ func (a *App) parseEventForm(request *http.Request, id int64) (models.Event, err
 		CoffeeTableNotes: strings.TrimSpace(request.FormValue("coffee_table_notes")), CakeNotes: cakeNotes,
 		SweetsNotes: strings.TrimSpace(request.FormValue("sweets_notes")), DessertsNotes: strings.TrimSpace(request.FormValue("desserts_notes")),
 		Notes: checklistObservations(request.Form), SafetyMarginPercent: parseFloat(request.FormValue("safety_margin_percent")),
-		AdditionalGuestMarginOverride: parseOptionalFloat(request.FormValue("additional_guest_margin_override")), UsesGlassware: boolForm(request.FormValue("uses_glassware")),
+		// The operational margin is a global setting; an event no longer carries a
+		// hidden per-event override once the form has been saved again.
+		AdditionalGuestMarginOverride: sql.NullFloat64{}, UsesGlassware: boolForm(request.FormValue("uses_glassware")),
 		KitchenCookID: parseOptionalInt(request.FormValue("kitchen_cook_id")),
 	}
 	if event.SafetyMarginPercent < 0 || event.SafetyMarginPercent > 100 {
@@ -186,10 +199,15 @@ func (a *App) eventUpdate(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id int64) {
+	isNewEvent := id == 0
 	event, err := a.parseEventForm(request, id)
-	rentedDecorations, rentalErr := parseRentedDecorationForm(request)
-	if err == nil {
-		err = rentalErr
+	// Decoration items now live on their own event page. Keep this compatibility
+	// branch only for old queued forms so an ordinary event edit never clears an
+	// already configured decoration.
+	decorationConfigSubmitted := request.Form.Has("decoration_selection_submitted") || len(request.Form["decoration_ids"]) > 0 || len(request.Form["rented_decoration_name"]) > 0
+	rentedDecorations := []models.DecorationCompositionItem{}
+	if decorationConfigSubmitted {
+		rentedDecorations, err = parseRentedDecorationForm(request)
 	}
 	menuModelID := int64(0)
 	if raw := request.FormValue("menu_model_id"); raw != "" {
@@ -202,7 +220,7 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 	sectionCustomItems := parseMenuModelSectionCustomItems(request)
 	itemConfigurations := parseMenuModelConfigurations(request)
 	var decorationSelection []models.EventDecoration
-	if err == nil {
+	if err == nil && decorationConfigSubmitted {
 		decorationSelection, err = a.store.EventDecorationSelectionForWindow(request.Context(), id, event.StartsAt, event.EndsAt)
 		if err == nil {
 			decorationSelection, err = applyEventDecorationForm(request, decorationSelection, event.HasDecoration)
@@ -277,7 +295,8 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		a.render(writer, request, "event_form", data)
 		return
 	}
-	if event.HasDecoration || id > 0 {
+	profileSubmitted := request.Form.Has("decoration_style") || request.Form.Has("decoration_description") || request.Form.Has("decoration_primary_colors") || request.Form.Has("decoration_theme") || request.Form.Has("decoration_notes") || request.Form.Has("decoration_responsible")
+	if profileSubmitted {
 		profile, _ := a.store.GetDecorationProfile(request.Context(), event.ID)
 		profile.EventID = event.ID
 		profile.Style = strings.TrimSpace(request.FormValue("decoration_style"))
@@ -294,13 +313,19 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 			}
 		}
 	}
-	if event.HasDecoration {
+	if event.HasDecoration && decorationConfigSubmitted {
 		if decorationErr := a.store.SaveEventDecorations(request.Context(), event.ID, decorationSelection); decorationErr != nil {
 			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(decorationErr))), http.StatusSeeOther)
 			return
 		}
 		if rentalErr := a.store.SaveEventRentedDecorationItems(request.Context(), event.ID, rentedDecorations); rentalErr != nil {
 			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(rentalErr))), http.StatusSeeOther)
+			return
+		}
+	}
+	if isNewEvent && event.HasDecoration && request.Form.Has("decoration_draft_submitted") {
+		if draftErr := a.saveInitialDecorationDraft(request, event.ID, user.ID); draftErr != nil {
+			a.redirect(writer, request, fmt.Sprintf("/events/%d/edit?type=danger&message=%s", event.ID, url.QueryEscape(databaseErrorMessage(draftErr))), http.StatusSeeOther)
 			return
 		}
 	}
@@ -356,7 +381,92 @@ func (a *App) saveEvent(writer http.ResponseWriter, request *http.Request, id in
 		return
 	}
 	target := fmt.Sprintf("/events/%d?message=%s", event.ID, url.QueryEscape("Evento salvo e checklist recalculada."))
+	if isNewEvent && event.HasDecoration {
+		target = fmt.Sprintf("/events/%d/decorations?message=%s", event.ID, url.QueryEscape("Evento criado. Complete fotos e ajustes finos da decoração."))
+	}
 	a.redirect(writer, request, target, http.StatusSeeOther)
+}
+
+func (a *App) saveInitialDecorationDraft(request *http.Request, eventID, userID int64) error {
+	if err := a.store.EnsureDefaultDecorationCompositions(request.Context(), eventID, userID); err != nil {
+		return err
+	}
+	profile, err := a.store.GetDecorationProfile(request.Context(), eventID)
+	if err != nil {
+		return err
+	}
+	profile.PrimaryColors = strings.TrimSpace(request.FormValue("decoration_event_color"))
+	if err := a.store.SaveDecorationProfile(request.Context(), &profile, userID); err != nil {
+		return err
+	}
+	compositionByKind := make(map[string]int64, len(profile.Compositions))
+	for _, composition := range profile.Compositions {
+		compositionByKind[composition.CompositionType] = composition.ID
+	}
+	choices := map[string]map[string]bool{
+		"cake_table":   decorationDraftChoices("Vaso dourado", "Vaso prata", "Vaso de vidro", "Vaso de cerâmica", "Samambaia", "Bandeja para doces", "Bolo fake", "Boleira", "Mesa de decoração", "Arranjo da mesa do bolo"),
+		"guest_tables": decorationDraftChoices("Arranjo de mesa", "Vaso de mesa", "Sousplat", "Toalha de mesa", "Guardanapo", "Número de mesa"),
+		"ceremony":     decorationDraftChoices("Tapete da cerimônia", "Cachepô", "Arranjo da cerimônia", "Estrutura do altar"),
+		"other":        decorationDraftChoices("Lounge", "Pranchão", "Painel", "Cordão de luzes", "Peça personalizada"),
+	}
+	for kind, allowed := range choices {
+		compositionID := compositionByKind[kind]
+		if compositionID == 0 {
+			return fmt.Errorf("composição de decoração não encontrada")
+		}
+		for _, rawName := range request.Form["decoration_"+kind+"_items"] {
+			name := strings.TrimSpace(rawName)
+			if !allowed[name] {
+				continue
+			}
+			item := models.DecorationCompositionItem{CompositionID: compositionID, Name: name, Quantity: 1, Origin: "owned"}
+			applyInitialDecorationOptions(request, kind, &item)
+			if err := a.store.SaveDecorationCompositionItem(request.Context(), eventID, &item); err != nil {
+				return err
+			}
+		}
+		if request.MultipartForm != nil {
+			for index, header := range request.MultipartForm.File["decoration_"+kind+"_photos"] {
+				if err := a.saveDecorationReferencePhoto(request, eventID, compositionID, header, index, kind); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func decorationDraftChoices(names ...string) map[string]bool {
+	result := make(map[string]bool, len(names))
+	for _, name := range names {
+		result[name] = true
+	}
+	return result
+}
+
+func applyInitialDecorationOptions(request *http.Request, kind string, item *models.DecorationCompositionItem) {
+	item.Color = strings.TrimSpace(request.FormValue("decoration_event_color"))
+	switch kind {
+	case "cake_table":
+		if item.Name == "Bolo fake" {
+			item.FakeCakeType = strings.TrimSpace(request.FormValue("decoration_cake_fake_type"))
+		}
+	case "guest_tables":
+		switch item.Name {
+		case "Sousplat":
+			parts := strings.SplitN(request.FormValue("decoration_guest_sousplat"), "|", 2)
+			item.Color = strings.TrimSpace(parts[0])
+			if len(parts) == 2 {
+				item.Origin = strings.TrimSpace(parts[1])
+			}
+		case "Arranjo de mesa":
+			item.ArrangementKind = normalizeArrangementKind(request.FormValue("decoration_guest_arrangement_kind"))
+		}
+	case "ceremony":
+		if item.Name == "Arranjo da cerimônia" {
+			item.ArrangementKind = normalizeArrangementKind(request.FormValue("decoration_ceremony_arrangement_kind"))
+		}
+	}
 }
 
 func parseRentedDecorationForm(request *http.Request) ([]models.DecorationCompositionItem, error) {
@@ -667,12 +777,12 @@ func (a *App) eventShow(writer http.ResponseWriter, request *http.Request) {
 
 func groupChecklist(items []models.ChecklistItem) []models.ChecklistGroup {
 	definitions := []models.ChecklistGroup{
-		{Key: "food", Category: "Comida", Completed: true},
-		{Key: "disposable", Category: "Descartáveis", Completed: true},
 		{Key: "material", Category: "Material", Completed: true},
+		{Key: "disposable", Category: "Descartáveis", Completed: true},
+		{Key: "food", Category: "Comida", Completed: true},
 		{Key: "decoration", Category: "Decoração", Completed: true},
 	}
-	groupIndexes := map[string]int{"food": 0, "disposable": 1, "material": 2, "decoration": 3}
+	groupIndexes := map[string]int{"material": 0, "disposable": 1, "food": 2, "decoration": 3}
 	for _, item := range items {
 		if checklistIsStaffPerson(item) {
 			continue
@@ -738,8 +848,11 @@ func checklistIsStaffPerson(item models.ChecklistItem) bool {
 func checklistIsDecoration(item models.ChecklistItem) bool {
 	origin := strings.ToLower(item.CalculationOrigin)
 	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	kind := strings.ToLower(strings.TrimSpace(item.ItemKind))
 	return category == "decoração" ||
+		kind == "decoration" ||
 		strings.HasPrefix(item.SourceKey, "decoration:") ||
+		strings.HasPrefix(item.SourceKey, "decoration-composition:") ||
 		strings.HasPrefix(item.SourceKey, "decoration-rental:") ||
 		strings.Contains(origin, "decoração")
 }

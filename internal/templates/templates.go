@@ -25,6 +25,13 @@ func NewRenderer() *Renderer {
 			}
 			return value.Local().Format("02/01/2006 · 15:04")
 		},
+		"monthYear": func(value time.Time) string {
+			months := []string{"", "janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"}
+			if value.IsZero() {
+				return ""
+			}
+			return months[int(value.Month())] + " de " + fmt.Sprintf("%d", value.Year())
+		},
 		"dateTimeInput": func(value time.Time) string {
 			if value.IsZero() {
 				return ""
@@ -73,6 +80,11 @@ func NewRenderer() *Renderer {
 		"hasRole":                 func(user models.User, slug string) bool { return user.HasRole(slug) },
 		"can":                     func(user models.User, permission string) bool { return user.Can(permission) },
 		"roleLabels":              func(user models.User) string { return user.RoleLabels() },
+		"decorationColors":        decorationColors,
+		"arrangementColors":       arrangementColors,
+		"fakeCakeTypes":           fakeCakeTypes,
+		"decorationSuggestions":   decorationSuggestions,
+		"decorationAreaHint":      decorationAreaHint,
 		"operationQty": func(item models.ChecklistItem, stage string) float64 {
 			switch stage {
 			case "separating":
@@ -166,6 +178,44 @@ func itemColor(notes string) string {
 		}
 	}
 	return ""
+}
+
+func decorationColors() []string {
+	return []string{"Ratan natural (acervo)", "Branco", "Bege", "Areia", "Nude", "Rosa", "Rosé", "Terracota", "Verde", "Azul", "Lilás", "Vermelho", "Preto", "Dourado", "Prata"}
+}
+
+func arrangementColors() []string {
+	return []string{"Branco", "Bege", "Areia", "Nude", "Rosa", "Rosé", "Terracota", "Verde", "Azul", "Lilás", "Vermelho", "Preto", "Dourado", "Prata"}
+}
+
+func fakeCakeTypes() []string {
+	return []string{"Clássico branco", "Rústico", "Floral", "Dourado", "Minimalista", "Personalizado"}
+}
+
+func decorationSuggestions(kind string) []string {
+	switch kind {
+	case "cake_table":
+		return []string{"Vaso dourado", "Vaso prata", "Vaso de vidro", "Vaso de cerâmica", "Samambaia", "Bandeja para doces", "Bolo fake", "Boleira", "Mesa de decoração", "Arranjo da mesa do bolo"}
+	case "guest_tables":
+		return []string{"Arranjo de mesa", "Vaso de mesa", "Sousplat", "Toalha de mesa", "Guardanapo", "Número de mesa"}
+	case "ceremony":
+		return []string{"Tapete da cerimônia", "Cachepô", "Arranjo da cerimônia", "Estrutura do altar"}
+	default:
+		return []string{"Lounge", "Pranchão", "Painel", "Cordão de luzes", "Peça personalizada"}
+	}
+}
+
+func decorationAreaHint(kind string) string {
+	switch kind {
+	case "cake_table":
+		return "Vasos, bandejas, bolo fake, boleiras, mesas e arranjos."
+	case "guest_tables":
+		return "Arranjos, vasos, sousplats, toalhas e detalhes das mesas."
+	case "ceremony":
+		return "Tapete, cachepôs, altar e arranjos da cerimônia."
+	default:
+		return "Lounge, pranchão e demais composições especiais."
+	}
 }
 
 func shortageResolutionLabel(value string) string {

@@ -1,9 +1,10 @@
 package models
 
 const (
-	RoleAdmin = "admin"
-	RoleCorre = "corre"
-	RoleAgent = "agent"
+	RoleAdmin        = "admin"
+	RoleCorre        = "corre"
+	RoleAgent        = "agent"
+	RoleEventCreator = "event_creator"
 
 	PermEventView     = "events.view"
 	PermEventEdit     = "events.edit"
@@ -39,9 +40,9 @@ func (u User) Can(permission string) bool {
 	}
 	switch permission {
 	case PermEventView:
-		return u.HasRole(RoleCorre) || u.HasRole(RoleAgent)
+		return u.HasRole(RoleCorre) || u.HasRole(RoleAgent) || u.HasRole(RoleEventCreator)
 	case PermEventEdit, PermRules, PermCatalog, PermModels, PermAdmin:
-		return false
+		return permission == PermEventEdit && u.HasRole(RoleEventCreator)
 	case PermChecklist, PermInventoryView, PermInventoryEdit:
 		return u.HasRole(RoleCorre)
 	case PermLayouts:
@@ -70,6 +71,8 @@ func RoleDisplayName(slug string) string {
 		return "Corre"
 	case RoleAgent:
 		return "Agent"
+	case RoleEventCreator:
+		return "Criador de eventos"
 	case "organizer":
 		return "Administrador"
 	case "operational":
@@ -80,12 +83,12 @@ func RoleDisplayName(slug string) string {
 }
 
 func KnownRoleSlugs() []string {
-	return []string{RoleAdmin, RoleCorre, RoleAgent}
+	return []string{RoleAdmin, RoleCorre, RoleEventCreator, RoleAgent}
 }
 
 func IsKnownRole(slug string) bool {
 	switch slug {
-	case RoleAdmin, RoleCorre, RoleAgent:
+	case RoleAdmin, RoleCorre, RoleEventCreator, RoleAgent:
 		return true
 	default:
 		return false
@@ -93,7 +96,7 @@ func IsKnownRole(slug string) bool {
 }
 
 func PrimaryRole(roles []string) string {
-	for _, candidate := range []string{RoleAdmin, RoleCorre, RoleAgent} {
+	for _, candidate := range []string{RoleAdmin, RoleEventCreator, RoleCorre, RoleAgent} {
 		for _, role := range roles {
 			if role == candidate {
 				return candidate

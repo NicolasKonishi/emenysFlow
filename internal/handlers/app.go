@@ -54,11 +54,18 @@ type PageData struct {
 	Error                    string
 	CurrentNav               string
 	Dashboard                models.Dashboard
+	Calendar                 models.EventCalendar
 	Events                   []models.Event
 	Event                    models.Event
+	EventNotes               []models.EventNote
 	Checklist                models.Checklist
 	Groups                   []models.ChecklistGroup
+	DecorationChecklist      models.Checklist
+	DecorationGroups         []models.ChecklistGroup
+	DecorationShortages      []models.ChecklistShortage
 	Items                    []models.InventoryItem
+	InventoryTabs            []models.InventoryTab
+	InventoryAlerts          []models.InventoryAlert
 	Item                     models.InventoryItem
 	Categories               []models.Category
 	Locations                []models.Location
@@ -116,6 +123,7 @@ type PageData struct {
 	Query                    string
 	Filter                   string
 	ActiveTab                string
+	MissingCount             int
 	IsEdit                   bool
 	MenuCustomized           bool
 	FormAction               string
@@ -163,6 +171,7 @@ func (a *App) Routes() http.Handler {
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /", a.onlineDashboard)
 	protected.HandleFunc("GET /online", a.redirectOnlineHome)
+	protected.HandleFunc("GET /calendar", a.calendarPage)
 	protected.HandleFunc("GET /offline", a.offlineHub)
 	protected.HandleFunc("POST /workspace", a.setWorkspace)
 	protected.HandleFunc("POST /logout", a.logout)
@@ -192,6 +201,10 @@ func (a *App) Routes() http.Handler {
 	protected.HandleFunc("POST /events", a.eventCreate)
 	protected.HandleFunc("GET /events/menu-model-preview", a.menuModelPreview)
 	protected.HandleFunc("GET /events/{id}", a.eventShow)
+	protected.HandleFunc("POST /events/{id}/notes", a.eventNoteCreate)
+	protected.HandleFunc("POST /events/{id}/notes/{noteID}", a.eventNoteUpdate)
+	protected.HandleFunc("POST /events/{id}/notes/{noteID}/delete", a.eventNoteDelete)
+	protected.HandleFunc("POST /events/{id}/notes/{noteID}/photos", a.eventNotePhotoUpload)
 	protected.HandleFunc("GET /events/{id}/edit", a.eventForm)
 	protected.HandleFunc("POST /events/{id}", a.eventUpdate)
 	protected.HandleFunc("POST /events/{id}/generate", a.eventGenerate)
@@ -298,6 +311,7 @@ func (a *App) Routes() http.Handler {
 	protected.HandleFunc("GET /events/{id}/decorations", a.eventDecorationsPage)
 	protected.HandleFunc("POST /events/{id}/decorations", a.eventDecorationsSave)
 	protected.HandleFunc("POST /events/{id}/decorations/compositions", a.decorationCompositionAdd)
+	protected.HandleFunc("POST /events/{id}/decorations/compositions/{compositionID}/quick-items", a.decorationQuickItemsAdd)
 	protected.HandleFunc("POST /events/{id}/decorations/compositions/{compositionID}", a.decorationCompositionUpdate)
 	protected.HandleFunc("POST /events/{id}/decorations/compositions/{compositionID}/remove", a.decorationCompositionRemove)
 	protected.HandleFunc("POST /events/{id}/decorations/compositions/{compositionID}/items", a.decorationCompositionItemAdd)
@@ -305,6 +319,7 @@ func (a *App) Routes() http.Handler {
 	protected.HandleFunc("POST /events/{id}/decorations/items/{itemID}/remove", a.decorationCompositionItemRemove)
 	protected.HandleFunc("POST /events/{id}/decorations/photos", a.decorationPhotosUpload)
 	protected.HandleFunc("GET /photos/{photoID}", a.referencePhotoView)
+	protected.HandleFunc("GET /event-notes/photos/{photoID}", a.eventNotePhotoView)
 	protected.HandleFunc("POST /events/{id}/decorations/photos/{photoID}/remove", a.referencePhotoRemove)
 	protected.HandleFunc("GET /api/offline/bootstrap", a.offlineBootstrap)
 	protected.HandleFunc("POST /api/sync/operations", a.syncOperations)

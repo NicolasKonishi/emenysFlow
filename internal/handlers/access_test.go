@@ -13,11 +13,15 @@ func TestPermissionFor(t *testing.T) {
 		method, path, want string
 	}{
 		{http.MethodGet, "/", ""},
+		{http.MethodGet, "/calendar", models.PermEventView},
 		{http.MethodGet, "/events", models.PermEventView},
 		{http.MethodGet, "/events/12", models.PermEventView},
 		{http.MethodGet, "/events/new", models.PermEventEdit},
 		{http.MethodGet, "/events/menu-model-preview", models.PermEventEdit},
 		{http.MethodGet, "/events/12/edit", models.PermEventEdit},
+		{http.MethodPost, "/events/12", models.PermEventEdit},
+		{http.MethodPost, "/events/12/notes", models.PermEventEdit},
+		{http.MethodPost, "/events/12/cancel", models.PermAdmin},
 		{http.MethodGet, "/events/12/layout", models.PermLayouts},
 		{http.MethodPost, "/events/12/layout", models.PermLayouts},
 		{http.MethodGet, "/events/12/operation", models.PermChecklist},

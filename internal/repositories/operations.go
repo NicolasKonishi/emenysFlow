@@ -69,7 +69,16 @@ func (s *Store) SaveEventOperation(ctx context.Context, eventID int64, operation
 			case "checking":
 				_, err = tx.ExecContext(ctx, `UPDATE checklist_items SET status=CASE WHEN ?>=required_quantity THEN 'checked' ELSE 'separating' END,checked_by=?,checked_at=?,updated_at=? WHERE id=? AND checklist_id=(SELECT id FROM checklists WHERE event_id=?)`, quantity, nullableUserID(userID), now, now, itemID, eventID)
 			case "loading":
+				var requiredQuantity float64
+				err = tx.QueryRowContext(ctx, `SELECT required_quantity FROM checklist_items
+					WHERE id=? AND checklist_id=(SELECT id FROM checklists WHERE event_id=?)`, itemID, eventID).Scan(&requiredQuantity)
+				if err != nil {
+					return err
+				}
 				_, err = tx.ExecContext(ctx, `UPDATE checklist_items SET loaded_quantity=?,loading_decision=CASE WHEN ?>=required_quantity THEN 'complete' ELSE 'missing' END,loading_missing_quantity=MAX(0,required_quantity-?),status='loaded',loaded_by=?,loaded_at=?,updated_at=? WHERE id=? AND checklist_id=(SELECT id FROM checklists WHERE event_id=?)`, quantity, quantity, quantity, nullableUserID(userID), now, now, itemID, eventID)
+				if err == nil {
+					err = syncLoadingShortage(ctx, tx, eventID, itemID, requiredQuantity, quantity, userID, now)
+				}
 			}
 			if err != nil {
 				return err
@@ -125,7 +134,7 @@ func (s *Store) UpdateMobileLoadingItem(ctx context.Context, eventID, itemID int
 		if count, _ := result.RowsAffected(); count == 0 {
 			return sql.ErrNoRows
 		}
-		return nil
+		return syncLoadingShortage(ctx, tx, eventID, itemID, requiredQuantity, loadedQuantity, userID, now)
 	})
 	return loadedQuantity, err
 }

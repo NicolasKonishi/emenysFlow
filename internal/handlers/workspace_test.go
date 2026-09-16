@@ -111,7 +111,7 @@ func TestWorkspacePagesRenderAfterLogin(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"/":        "Próximos eventos",
+		"/":        "Agenda de eventos",
 		"/offline": "Checklists e layout das festas",
 	}
 	for path, expected := range checks {

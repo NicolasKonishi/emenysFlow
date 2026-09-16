@@ -19,6 +19,11 @@ func (a *App) eventDecorationsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	data := a.baseData(r, "Decoração do evento", "events")
 	data.Event = event
+	if event.HasDecoration {
+		if err := a.store.EnsureDefaultDecorationCompositions(r.Context(), id, currentUser(r).ID); err != nil {
+			data.Error = databaseErrorMessage(err)
+		}
+	}
 	data.DecorationProfile, _ = a.store.GetDecorationProfile(r.Context(), id)
 	data.Items, _ = a.store.ListInventory(r.Context(), "", "", false)
 	data.Decorations, err = a.store.EventDecorationSelection(r.Context(), id)

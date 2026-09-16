@@ -15,14 +15,68 @@ func (a *App) inventory(writer http.ResponseWriter, request *http.Request) {
 	data := a.baseData(request, "Estoque", "inventory")
 	data.Query = request.URL.Query().Get("q")
 	data.Filter = request.URL.Query().Get("category")
+	data.ActiveTab = inventoryTab(request.URL.Query().Get("tab"))
 	items, err := a.store.ListStockInventory(request.Context(), data.Query, data.Filter, request.URL.Query().Get("inactive") == "1")
 	if err != nil {
 		data.Error = databaseErrorMessage(err)
 	} else {
-		data.Items = items
+		data.InventoryTabs = inventoryTabs(items)
+		data.Items = filterInventoryTab(items, data.ActiveTab)
+	}
+	data.InventoryAlerts, err = a.store.ListInventoryAlerts(request.Context())
+	if err != nil && data.Error == "" {
+		data.Error = databaseErrorMessage(err)
 	}
 	data.Categories, _ = a.store.ListCategories(request.Context())
 	a.render(writer, request, "inventory", data)
+}
+
+func inventoryTab(value string) string {
+	switch value {
+	case "food", "disposable", "material":
+		return value
+	default:
+		return "food"
+	}
+}
+
+func inventoryTabs(items []models.InventoryItem) []models.InventoryTab {
+	tabs := []models.InventoryTab{
+		{Key: "food", Label: "Comida"},
+		{Key: "disposable", Label: "Descartáveis"},
+		{Key: "material", Label: "Material"},
+	}
+	indexes := map[string]int{"food": 0, "disposable": 1, "material": 2}
+	for _, item := range items {
+		tabs[indexes[inventoryItemTab(item)]].Count++
+	}
+	return tabs
+}
+
+func filterInventoryTab(items []models.InventoryItem, tab string) []models.InventoryItem {
+	filtered := make([]models.InventoryItem, 0, len(items))
+	for _, item := range items {
+		if inventoryItemTab(item) == tab {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func inventoryItemTab(item models.InventoryItem) string {
+	category := strings.ToLower(strings.TrimSpace(item.CategoryName))
+	subcategory := strings.ToLower(strings.TrimSpace(item.Subcategory))
+	name := strings.ToLower(strings.TrimSpace(item.Name))
+	if strings.Contains(category, "descart") || strings.Contains(subcategory, "descart") || strings.Contains(name, "descart") {
+		return "disposable"
+	}
+	if strings.Contains(category, "comida") || strings.Contains(category, "bebida") ||
+		strings.Contains(category, "bolo") || strings.Contains(category, "doce") ||
+		strings.Contains(category, "sobremesa") || strings.Contains(category, "ingrediente") ||
+		(category == "mesa de café" && item.ItemKind == "consumable") {
+		return "food"
+	}
+	return "material"
 }
 
 func (a *App) inventoryForm(writer http.ResponseWriter, request *http.Request) {

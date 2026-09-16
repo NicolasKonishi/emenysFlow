@@ -6,7 +6,6 @@
 <div class="page-wrap shared-page">
   <header class="event-hero">
     <div><span class="eyebrow">{{dateTime .Event.StartsAt}}</span><h1>BUFFET — {{.Event.ClientName}} — {{.Event.GuestCount}} pessoas</h1><p>{{.Event.Name}} · {{.Event.Venue}}{{if .Event.HasCake}} · Bolo: {{if .Event.CakeNotes}}{{.Event.CakeNotes}}{{else}}sabor a definir{{end}}{{else}} · Sem bolo{{end}}</p></div>
-    <button class="button secondary" type="button" data-print>Imprimir</button>
   </header>
   <section class="checklist-overview panel">
     <div class="progress-ring" style="--progress:{{.Checklist.Progress.Percentage}}"><strong>{{.Checklist.Progress.Percentage}}%</strong><small>concluído</small></div>

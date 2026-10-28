@@ -22,3 +22,6 @@ coverage.out
 # SO
 .DS_Store
 Thumbs.db
+
+# Exportação para o CRM (dados do negócio)
+emenysflow-checklists*.json
